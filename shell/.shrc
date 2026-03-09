@@ -1,0 +1,19 @@
+# quickTerminal sh config
+
+# Ensure PATH is complete (critical for .app bundle launched from Finder)
+if [ -x /usr/libexec/path_helper ]; then
+    eval "$(/usr/libexec/path_helper -s)"
+fi
+
+# Source user's profile if available
+if [ -n "$HOME" ] && [ -r "$HOME/.profile" ]; then
+    . "$HOME/.profile" 2>/dev/null
+fi
+
+# Easter egg splash command (shared across all shells)
+# ENV points to this file — derive directory from it
+_qt_dir="$(cd "$(dirname "$ENV")" 2>/dev/null && pwd)"
+[ -f "${_qt_dir}/.qt-splash.sh" ] && . "${_qt_dir}/.qt-splash.sh"
+
+# Prompt theme
+. "${_qt_dir}/themes/qt-theme-loader.sh" 2>/dev/null

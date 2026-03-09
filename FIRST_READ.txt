@@ -1,0 +1,58 @@
+╔══════════════════════════════════════════════════════════════╗
+║                      quickTERMINAL                           ║
+║              A blazing-fast terminal for macOS               ║
+╚══════════════════════════════════════════════════════════════╝
+
+
+  BEFORE YOU START
+  ════════════════
+
+  macOS blocks apps from unidentified developers by default.
+  quickTERMINAL is not signed with an Apple Developer certificate,
+  so you need to remove the quarantine flag ONCE before launching.
+
+
+  OPTION 1 — Use the installer (recommended)
+  ───────────────────────────────────────────
+
+  Open Terminal.app and run:
+
+      bash install.sh
+
+  This removes the quarantine flag, optionally copies the app
+  to /Applications, and launches quickTERMINAL.
+
+
+  OPTION 2 — Do it manually
+  ─────────────────────────
+
+  Open Terminal.app and run:
+
+      xattr -cr quickTerminal.app
+
+  Then double-click quickTerminal.app to launch.
+
+
+  WHAT DOES xattr -cr DO?
+  ───────────────────────
+
+  When you download a file from the internet, macOS adds a
+  "quarantine" attribute. This flag tells Gatekeeper to block
+  the app. The command simply removes that flag — nothing else.
+  It is completely safe and only needs to be done once.
+
+
+  AFTER FIRST LAUNCH
+  ──────────────────
+
+  quickTERMINAL lives in your menu bar (no dock icon).
+  Press Ctrl + < to toggle the terminal window.
+  Double-tap Ctrl to open the quickBAR command palette.
+
+
+  MORE INFO
+  ─────────
+
+  GitHub:  https://github.com/LEVOGNE/quickTerminal
+  License: MIT
+

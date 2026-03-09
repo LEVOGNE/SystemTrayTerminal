@@ -1,0 +1,47 @@
+# macOS
+.DS_Store
+._*
+
+# Local assistant/app settings
+.claude/
+
+# Build artifacts
+quickTerminal
+quickTerminal_debug
+quickTerminal.app/
+*.dSYM/
+*.iconset/
+AppIcon.icns
+*.o
+*.a
+*.out
+
+# Release archives
+*.zip
+*.tar.gz
+*.dmg
+
+# Shell history (user-specific)
+shell/.zsh_history
+
+# Crash reports (user-specific)
+crash.log
+
+# Swift / package build caches
+.build/
+*.swiftmodule
+*.swiftdoc
+*.swiftsourceinfo
+
+# Xcode user-specific data
+DerivedData/
+*.xcuserdatad/
+*.xcuserstate
+*.xcodeproj/xcuserdata/
+
+# Editor/IDE local files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
