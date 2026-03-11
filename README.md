@@ -22,7 +22,7 @@
 
 <br>
 
-[**Download quickTerminal.app (v1.2.0)**](https://github.com/LEVOGNE/quickTerminal/releases/latest)
+[**Download quickTerminal.app (v1.2.0)**](https://github.com/LEVOGNE/quickTerminal/releases/latest) · [**Website**](https://levogne.github.io/quickTerminal/)
 
 ---
 
