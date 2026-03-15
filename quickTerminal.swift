@@ -14503,6 +14503,647 @@ struct SyntaxHighlighter {
     }
 }
 
+// ── EditorTextStorage ──────────────────────────────────────────────────────
+
+class EditorTextStorage: NSTextStorage {
+    private var _backing = NSMutableAttributedString()
+    var language: EditorLanguage = .plain
+    var isDark: Bool = true
+
+    override var string: String { _backing.string }
+
+    override func attributes(at location: Int,
+                              effectiveRange range: NSRangePointer?) -> [NSAttributedString.Key: Any] {
+        return _backing.attributes(at: location, effectiveRange: range)
+    }
+
+    override func replaceCharacters(in range: NSRange, with str: String) {
+        beginEditing()
+        _backing.replaceCharacters(in: range, with: str)
+        edited(.editedCharacters, range: range,
+               changeInLength: str.utf16.count - range.length)
+        endEditing()
+    }
+
+    override func setAttributes(_ attrs: [NSAttributedString.Key: Any]?, range: NSRange) {
+        beginEditing()
+        _backing.setAttributes(attrs, range: range)
+        edited(.editedAttributes, range: range, changeInLength: 0)
+        endEditing()
+    }
+
+    override func processEditing() {
+        super.processEditing()
+        guard editedMask.contains(.editedCharacters) else { return }
+        applyHighlighting()
+    }
+
+    func applyHighlighting() {
+        let full = NSRange(location: 0, length: _backing.length)
+        guard full.length > 0 else { return }
+        let fg = isDark ? NSColor(calibratedWhite: 0.90, alpha: 1) : NSColor(calibratedWhite: 0.10, alpha: 1)
+        beginEditing()
+        _backing.setAttributes([.foregroundColor: fg], range: full)
+        let tokens = SyntaxHighlighter.tokenize(source: _backing.string, language: language)
+        for tok in tokens {
+            guard tok.range.location + tok.range.length <= _backing.length else { continue }
+            let c = SyntaxHighlighter.color(for: tok.type, dark: isDark)
+            _backing.addAttribute(.foregroundColor, value: c, range: tok.range)
+        }
+        edited(.editedAttributes, range: full, changeInLength: 0)
+        endEditing()
+    }
+}
+
+// ── EditorLayoutManager ────────────────────────────────────────────────────
+
+class EditorLayoutManager: NSLayoutManager {
+    weak var gutterView: GutterView?
+
+    override func processEditing(for textStorage: NSTextStorage,
+                                  edited editMask: NSTextStorageEditActions,
+                                  range newCharRange: NSRange,
+                                  changeInLength delta: Int,
+                                  invalidatedRange invalidatedCharRange: NSRange) {
+        super.processEditing(for: textStorage, edited: editMask,
+                              range: newCharRange, changeInLength: delta,
+                              invalidatedRange: invalidatedCharRange)
+        DispatchQueue.main.async { [weak self] in
+            self?.gutterView?.needsDisplay = true
+        }
+    }
+}
+
+// ── GutterView ─────────────────────────────────────────────────────────────
+
+class GutterView: NSView {
+    static let width: CGFloat = 52
+    weak var textView: NSTextView?
+    weak var layoutManager: EditorLayoutManager?
+    var isDark: Bool = true
+
+    private var bgColor:   NSColor { isDark ? NSColor(calibratedWhite: 0.09, alpha: 1) : NSColor(calibratedWhite: 0.93, alpha: 1) }
+    private var numColor:  NSColor { isDark ? NSColor(calibratedWhite: 0.38, alpha: 1) : NSColor(calibratedWhite: 0.60, alpha: 1) }
+    private var curColor:  NSColor { isDark ? NSColor(calibratedWhite: 0.75, alpha: 1) : NSColor(calibratedWhite: 0.25, alpha: 1) }
+    private var borderCol: NSColor { isDark ? NSColor(calibratedWhite: 0.16, alpha: 1) : NSColor(calibratedWhite: 0.82, alpha: 1) }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let lm = layoutManager,
+              let tc = lm.textContainers.first,
+              let tv = textView,
+              let ctx = NSGraphicsContext.current?.cgContext else { return }
+
+        ctx.setFillColor(bgColor.cgColor)
+        ctx.fill(bounds)
+
+        ctx.setFillColor(borderCol.cgColor)
+        ctx.fill(NSRect(x: bounds.width - 1, y: 0, width: 1, height: bounds.height))
+
+        let font = tv.font ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: numColor]
+        let curAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: curColor]
+
+        let visibleRect = tv.visibleRect
+        let insetY = tv.textContainerInset.height
+
+        let glyphRange = lm.glyphRange(forBoundingRect: visibleRect, in: tc)
+        let charRange  = lm.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+
+        let str = lm.textStorage?.string ?? ""
+        var lineNum = 1
+        if charRange.location > 0 {
+            let before = (str as NSString).substring(to: charRange.location)
+            lineNum = before.components(separatedBy: "\n").count
+        }
+
+        let cursorLine = currentLineNumber(in: tv)
+
+        var glyphIdx = glyphRange.location
+        while glyphIdx < NSMaxRange(glyphRange) {
+            var lineGlyphRange = NSRange()
+            let lineRect = lm.lineFragmentRect(forGlyphAt: glyphIdx, effectiveRange: &lineGlyphRange)
+            let y = lineRect.minY + insetY - visibleRect.minY
+
+            let label = "\(lineNum)" as NSString
+            let a = lineNum == cursorLine ? curAttrs : attrs
+            let size = label.size(withAttributes: a)
+            label.draw(at: NSPoint(x: bounds.width - size.width - 10, y: y), withAttributes: a)
+
+            lineNum += 1
+            glyphIdx = NSMaxRange(lineGlyphRange)
+        }
+    }
+
+    private func currentLineNumber(in tv: NSTextView) -> Int {
+        let loc = tv.selectedRange().location
+        let str = tv.string as NSString
+        var line = 1
+        var i = 0
+        while i < loc && i < str.length {
+            if str.character(at: i) == 0x0A { line += 1 }
+            i += 1
+        }
+        return line
+    }
+}
+
+// ── EditorFooter ───────────────────────────────────────────────────────────
+
+class EditorFooter: NSView {
+    static let height: CGFloat = 24
+    private let infoLabel = NSTextField(labelWithString: "")
+    private let encBtn    = NSButton()
+    private let leBtn     = NSButton()
+    var isDark: Bool = true {
+        didSet { updateColors() }
+    }
+    var onEncodingClick:    (() -> Void)?
+    var onLineEndingClick:  (() -> Void)?
+
+    var line: Int = 1        { didSet { updateLabel() } }
+    var column: Int = 1      { didSet { updateLabel() } }
+    var encoding: String = "UTF-8"  { didSet { updateLabel() } }
+    var lineEnding: String = "LF"   { didSet { updateLabel() } }
+    var language: EditorLanguage = .plain { didSet { updateLabel() } }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+
+        infoLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        infoLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(infoLabel)
+
+        for btn in [encBtn, leBtn] {
+            btn.isBordered = false
+            btn.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(btn)
+        }
+        encBtn.target = self; encBtn.action = #selector(clickEnc)
+        leBtn.target  = self; leBtn.action  = #selector(clickLE)
+
+        NSLayoutConstraint.activate([
+            infoLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            infoLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            leBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            leBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            encBtn.trailingAnchor.constraint(equalTo: leBtn.leadingAnchor, constant: -12),
+            encBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        updateColors()
+        updateLabel()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func updateColors() {
+        layer?.backgroundColor = (isDark ? NSColor(calibratedWhite: 0.09, alpha: 1)
+                                         : NSColor(calibratedWhite: 0.93, alpha: 1)).cgColor
+        let fg = isDark ? NSColor(calibratedWhite: 0.45, alpha: 1) : NSColor(calibratedWhite: 0.55, alpha: 1)
+        infoLabel.textColor = fg
+        encBtn.contentTintColor = fg
+        leBtn.contentTintColor = fg
+    }
+
+    private func updateLabel() {
+        let langName = language == .plain ? "Plain Text" : language.rawValue.capitalized
+        infoLabel.stringValue = "Ln \(line), Col \(column)  ·  \(langName)"
+        encBtn.title = encoding
+        leBtn.title  = lineEnding
+    }
+
+    @objc private func clickEnc() { onEncodingClick?() }
+    @objc private func clickLE()  { onLineEndingClick?() }
+}
+
+// ── EditorSearchPanel ──────────────────────────────────────────────────────
+
+class EditorSearchPanel: NSView {
+    static let height: CGFloat = 36
+    private let findField     = NSTextField()
+    private let replaceField  = NSTextField()
+    private let closeBtn      = NSButton()
+    private let nextBtn       = NSButton()
+    private let prevBtn       = NSButton()
+    private let replaceBtn    = NSButton()
+    private let replaceAllBtn = NSButton()
+    private let modeLabel     = NSTextField(labelWithString: "Find")
+    var isReplaceMode = false { didSet { updateLayout() } }
+    var isDark: Bool = true   { didSet { updateColors() } }
+
+    var onFind:       ((String, Bool) -> Void)?
+    var onReplace:    ((String, String) -> Void)?
+    var onReplaceAll: ((String, String) -> Void)?
+    var onClose:      (() -> Void)?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+
+        findField.placeholderString = "Suchen…"
+        findField.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        findField.translatesAutoresizingMaskIntoConstraints = false
+
+        replaceField.placeholderString = "Ersetzen…"
+        replaceField.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        replaceField.translatesAutoresizingMaskIntoConstraints = false
+        replaceField.isHidden = true
+
+        for (btn, title) in [(closeBtn, "✕"), (prevBtn, "↑"), (nextBtn, "↓"),
+                              (replaceBtn, "Ersetzen"), (replaceAllBtn, "Alle")] {
+            btn.title = title
+            btn.isBordered = false
+            btn.font = NSFont.systemFont(ofSize: 11)
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(btn)
+        }
+        replaceBtn.isHidden    = true
+        replaceAllBtn.isHidden = true
+
+        [findField, replaceField, modeLabel].forEach { addSubview($0) }
+        modeLabel.translatesAutoresizingMaskIntoConstraints = false
+        modeLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+
+        closeBtn.target = self; closeBtn.action = #selector(tapClose)
+        nextBtn.target  = self; nextBtn.action  = #selector(tapNext)
+        prevBtn.target  = self; prevBtn.action  = #selector(tapPrev)
+        replaceBtn.target    = self; replaceBtn.action    = #selector(tapReplace)
+        replaceAllBtn.target = self; replaceAllBtn.action = #selector(tapReplaceAll)
+
+        NSLayoutConstraint.activate([
+            closeBtn.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            closeBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            modeLabel.leadingAnchor.constraint(equalTo: closeBtn.trailingAnchor, constant: 8),
+            modeLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            findField.leadingAnchor.constraint(equalTo: modeLabel.trailingAnchor, constant: 8),
+            findField.widthAnchor.constraint(equalToConstant: 180),
+            findField.centerYAnchor.constraint(equalTo: centerYAnchor),
+            prevBtn.leadingAnchor.constraint(equalTo: findField.trailingAnchor, constant: 4),
+            prevBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            nextBtn.leadingAnchor.constraint(equalTo: prevBtn.trailingAnchor, constant: 4),
+            nextBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            replaceField.leadingAnchor.constraint(equalTo: nextBtn.trailingAnchor, constant: 8),
+            replaceField.widthAnchor.constraint(equalToConstant: 160),
+            replaceField.centerYAnchor.constraint(equalTo: centerYAnchor),
+            replaceBtn.leadingAnchor.constraint(equalTo: replaceField.trailingAnchor, constant: 4),
+            replaceBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            replaceAllBtn.leadingAnchor.constraint(equalTo: replaceBtn.trailingAnchor, constant: 4),
+            replaceAllBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        updateColors()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    func focusFind() { window?.makeFirstResponder(findField) }
+
+    private func updateLayout() {
+        modeLabel.stringValue = isReplaceMode ? "Ersetzen" : "Suchen"
+        replaceField.isHidden = !isReplaceMode
+        replaceBtn.isHidden   = !isReplaceMode
+        replaceAllBtn.isHidden = !isReplaceMode
+    }
+
+    private func updateColors() {
+        layer?.backgroundColor = (isDark ? NSColor(calibratedWhite: 0.11, alpha: 0.97)
+                                         : NSColor(calibratedWhite: 0.91, alpha: 0.97)).cgColor
+        let fg = isDark ? NSColor(calibratedWhite: 0.80, alpha: 1) : NSColor(calibratedWhite: 0.20, alpha: 1)
+        modeLabel.textColor = fg
+        [closeBtn, nextBtn, prevBtn, replaceBtn, replaceAllBtn].forEach { $0.contentTintColor = fg }
+    }
+
+    @objc private func tapClose()      { onClose?() }
+    @objc private func tapNext()       { onFind?(findField.stringValue, true) }
+    @objc private func tapPrev()       { onFind?(findField.stringValue, false) }
+    @objc private func tapReplace()    { onReplace?(findField.stringValue, replaceField.stringValue) }
+    @objc private func tapReplaceAll() { onReplaceAll?(findField.stringValue, replaceField.stringValue) }
+}
+
+// ── EditorView ─────────────────────────────────────────────────────────────
+
+class EditorView: NSView, NSTextViewDelegate {
+
+    private let gutterView    = GutterView()
+    private let scrollView    = NSScrollView()
+    let textView              = NSTextView()
+    private let footer        = EditorFooter()
+    private let searchPanel   = EditorSearchPanel()
+    private var searchVisible = false
+
+    private let storage       = EditorTextStorage()
+    private let layoutMgr     = EditorLayoutManager()
+    private let textContainer = NSTextContainer()
+
+    var fileURL: URL? {
+        didSet {
+            storage.language = SyntaxHighlighter.detectLanguage(from: fileURL)
+            footer.language  = storage.language
+            storage.applyHighlighting()
+        }
+    }
+
+    var isDirty: Bool = false {
+        didSet { onDirtyChanged?(isDirty) }
+    }
+    var onDirtyChanged: ((Bool) -> Void)?
+
+    var fileEncoding: String.Encoding = .utf8
+    var lineEnding: String = "LF"
+
+    var isDark: Bool = true {
+        didSet { applyColors() }
+    }
+
+    var useTabs: Bool = true
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+
+        storage.addLayoutManager(layoutMgr)
+        layoutMgr.addTextContainer(textContainer)
+        textContainer.widthTracksTextView = true
+        textContainer.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                             height: CGFloat.greatestFiniteMagnitude)
+        textView.minSize = NSSize(width: 0, height: 0)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                  height: CGFloat.greatestFiniteMagnitude)
+        textView.isVerticallyResizable   = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainerInset = NSSize(width: 4, height: 4)
+        textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.isAutomaticQuoteSubstitutionEnabled  = false
+        textView.isAutomaticDashSubstitutionEnabled   = false
+        textView.isAutomaticLinkDetectionEnabled      = false
+        textView.isRichText  = false
+        textView.allowsUndo  = true
+        textView.delegate    = self
+
+        layoutMgr.gutterView = gutterView
+        gutterView.textView  = textView
+        gutterView.layoutManager = layoutMgr
+
+        scrollView.documentView          = textView
+        scrollView.hasVerticalScroller   = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autoresizingMask      = []
+        scrollView.drawsBackground       = false
+
+        searchPanel.isHidden = true
+        searchPanel.onClose      = { [weak self] in self?.hideSearch() }
+        searchPanel.onFind       = { [weak self] q, fwd in self?.findNext(query: q, forward: fwd) }
+        searchPanel.onReplace    = { [weak self] q, r in self?.replaceOne(query: q, replacement: r) }
+        searchPanel.onReplaceAll = { [weak self] q, r in self?.replaceAll(query: q, replacement: r) }
+
+        footer.onEncodingClick   = { [weak self] in self?.showEncodingMenu() }
+        footer.onLineEndingClick = { [weak self] in self?.showLineEndingMenu() }
+
+        [gutterView, scrollView, footer, searchPanel].forEach {
+            $0.translatesAutoresizingMaskIntoConstraints = false
+            addSubview($0)
+        }
+
+        NSLayoutConstraint.activate([
+            gutterView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            gutterView.topAnchor.constraint(equalTo: topAnchor),
+            gutterView.widthAnchor.constraint(equalToConstant: GutterView.width),
+            gutterView.bottomAnchor.constraint(equalTo: footer.topAnchor),
+
+            scrollView.leadingAnchor.constraint(equalTo: gutterView.trailingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: footer.topAnchor),
+
+            footer.leadingAnchor.constraint(equalTo: leadingAnchor),
+            footer.trailingAnchor.constraint(equalTo: trailingAnchor),
+            footer.bottomAnchor.constraint(equalTo: bottomAnchor),
+            footer.heightAnchor.constraint(equalToConstant: EditorFooter.height),
+
+            searchPanel.leadingAnchor.constraint(equalTo: gutterView.trailingAnchor),
+            searchPanel.trailingAnchor.constraint(equalTo: trailingAnchor),
+            searchPanel.bottomAnchor.constraint(equalTo: footer.topAnchor),
+            searchPanel.heightAnchor.constraint(equalToConstant: EditorSearchPanel.height),
+        ])
+
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(scrollDidChange),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView)
+
+        applyColors()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    // ── Load / Save ────────────────────────────────────────────────────────
+    func loadFile(url: URL) throws {
+        var enc: String.Encoding = .utf8
+        var content: String
+        if let s = try? String(contentsOf: url, encoding: .utf8) {
+            content = s; enc = .utf8
+        } else if let s = try? String(contentsOf: url, encoding: .isoLatin1) {
+            content = s; enc = .isoLatin1
+        } else {
+            content = try String(contentsOf: url, encoding: .utf8)
+        }
+        fileEncoding = enc
+        footer.encoding = enc == .utf8 ? "UTF-8" : "Latin-1"
+
+        if content.contains("\r\n")      { lineEnding = "CRLF" }
+        else if content.contains("\r")   { lineEnding = "CR"   }
+        else                             { lineEnding = "LF"   }
+        footer.lineEnding = lineEnding
+
+        fileURL = url
+        setContent(content)
+        isDirty = false
+    }
+
+    func saveFile(to url: URL? = nil) throws {
+        let target = url ?? fileURL
+        guard let target else { return }
+        var text = textView.string
+        if lineEnding == "CRLF" { text = text.replacingOccurrences(of: "\n", with: "\r\n") }
+        else if lineEnding == "CR" { text = text.replacingOccurrences(of: "\n", with: "\r") }
+        try text.write(to: target, atomically: true, encoding: fileEncoding)
+        fileURL = target
+        isDirty = false
+    }
+
+    func setContent(_ text: String) {
+        let range = NSRange(location: 0, length: storage.length)
+        storage.beginEditing()
+        storage.replaceCharacters(in: range, with: text)
+        storage.endEditing()
+        textView.setSelectedRange(NSRange(location: 0, length: 0))
+        gutterView.needsDisplay = true
+        updateFooterCursor()
+    }
+
+    // ── Colors ─────────────────────────────────────────────────────────────
+    func applyColors() {
+        let bg: NSColor = isDark ? NSColor(calibratedWhite: 0.10, alpha: 1) : NSColor(calibratedWhite: 0.97, alpha: 1)
+        let fg: NSColor = isDark ? NSColor(calibratedWhite: 0.90, alpha: 1) : NSColor(calibratedWhite: 0.10, alpha: 1)
+        layer?.backgroundColor = bg.cgColor
+        textView.backgroundColor = bg
+        textView.textColor = fg
+        textView.insertionPointColor = isDark ? .white : .black
+        storage.isDark = isDark
+        storage.applyHighlighting()
+        gutterView.isDark = isDark
+        gutterView.needsDisplay = true
+        footer.isDark = isDark
+        searchPanel.isDark = isDark
+    }
+
+    // ── NSTextViewDelegate ─────────────────────────────────────────────────
+    func textDidChange(_ notification: Notification) {
+        if !isDirty { isDirty = true }
+        updateFooterCursor()
+        gutterView.needsDisplay = true
+    }
+
+    func textViewDidChangeSelection(_ notification: Notification) {
+        updateFooterCursor()
+        gutterView.needsDisplay = true
+    }
+
+    private func updateFooterCursor() {
+        let sel  = textView.selectedRange()
+        let str  = textView.string as NSString
+        let line = str.substring(to: min(sel.location, str.length))
+                      .components(separatedBy: "\n").count
+        let beforeSel = str.substring(to: min(sel.location, str.length))
+        let lastNL = (beforeSel as NSString).range(of: "\n", options: .backwards)
+        let lineStart = lastNL.location == NSNotFound ? 0 : lastNL.location + 1
+        let col = sel.location - lineStart + 1
+        footer.line   = line
+        footer.column = col
+    }
+
+    @objc private func scrollDidChange() {
+        gutterView.needsDisplay = true
+    }
+
+    // ── Search ─────────────────────────────────────────────────────────────
+    func showSearch(replace: Bool = false) {
+        searchPanel.isReplaceMode = replace
+        searchPanel.isHidden = false
+        searchVisible = true
+        searchPanel.focusFind()
+    }
+
+    func hideSearch() {
+        searchPanel.isHidden = true
+        searchVisible = false
+        window?.makeFirstResponder(textView)
+    }
+
+    private func findNext(query: String, forward: Bool) {
+        guard !query.isEmpty else { return }
+        let text  = textView.string as NSString
+        let sel   = textView.selectedRange()
+        let start = forward ? NSMaxRange(sel) : max(0, sel.location - 1)
+        let opts: NSString.CompareOptions = forward ? [] : .backwards
+        let searchRange = forward
+            ? NSRange(location: start, length: text.length - start)
+            : NSRange(location: 0, length: start)
+        var found = text.range(of: query, options: opts, range: searchRange)
+        if found.location == NSNotFound {
+            // wrap around
+            found = text.range(of: query, options: opts,
+                               range: NSRange(location: 0, length: text.length))
+        }
+        if found.location != NSNotFound {
+            textView.setSelectedRange(found)
+            textView.scrollRangeToVisible(found)
+        }
+    }
+
+    private func replaceOne(query: String, replacement: String) {
+        guard !query.isEmpty else { return }
+        let sel     = textView.selectedRange()
+        let current = (textView.string as NSString).substring(with: sel)
+        if current == query {
+            textView.insertText(replacement, replacementRange: sel)
+        }
+        findNext(query: query, forward: true)
+    }
+
+    private func replaceAll(query: String, replacement: String) {
+        guard !query.isEmpty else { return }
+        let new = textView.string.replacingOccurrences(of: query, with: replacement)
+        if new != textView.string { setContent(new); isDirty = true }
+    }
+
+    // ── Encoding / Line ending menus ───────────────────────────────────────
+    private func showEncodingMenu() {
+        guard let win = window else { return }
+        let menu = NSMenu()
+        let encs: [(String, String.Encoding)] = [("UTF-8", .utf8), ("Latin-1", .isoLatin1), ("UTF-16", .utf16)]
+        for (title, enc) in encs {
+            let item = NSMenuItem(title: title, action: #selector(pickEncoding(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = NSNumber(value: enc.rawValue)
+            menu.addItem(item)
+        }
+        let loc = NSEvent.mouseLocation
+        menu.popUp(positioning: nil, at: win.convertPoint(fromScreen: loc), in: self)
+    }
+
+    @objc private func pickEncoding(_ item: NSMenuItem) {
+        if let raw = (item.representedObject as? NSNumber)?.uintValue {
+            fileEncoding = String.Encoding(rawValue: raw)
+            footer.encoding = item.title
+        }
+    }
+
+    private func showLineEndingMenu() {
+        guard let win = window else { return }
+        let menu = NSMenu()
+        for le in ["LF", "CRLF", "CR"] {
+            let item = NSMenuItem(title: le, action: #selector(pickLineEnding(_:)), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+        }
+        let loc = NSEvent.mouseLocation
+        menu.popUp(positioning: nil, at: win.convertPoint(fromScreen: loc), in: self)
+    }
+
+    @objc private func pickLineEnding(_ item: NSMenuItem) {
+        lineEnding = item.title
+        footer.lineEnding = lineEnding
+    }
+
+    // ── Tab key override ───────────────────────────────────────────────────
+    func textView(_ tv: NSTextView, doCommandBy selector: Selector) -> Bool {
+        if selector == #selector(NSResponder.insertTab(_:)) {
+            let insert = useTabs ? "\t" : String(repeating: " ", count: 4)
+            tv.insertText(insert, replacementRange: tv.selectedRange())
+            return true
+        }
+        return false
+    }
+
+    // ── Multiple cursors: Option+click ─────────────────────────────────────
+    override func mouseDown(with event: NSEvent) {
+        guard event.modifierFlags.contains(.option) else {
+            super.mouseDown(with: event)
+            return
+        }
+        let pt      = textView.convert(event.locationInWindow, from: nil)
+        let frac    = UnsafeMutablePointer<CGFloat>.allocate(capacity: 1)
+        frac.initialize(to: 0)
+        defer { frac.deallocate() }
+        let glyphIdx = layoutMgr.glyphIndex(for: pt, in: textContainer,
+                                             fractionOfDistanceThroughGlyph: frac)
+        let charIdx  = layoutMgr.characterIndexForGlyph(at: glyphIdx)
+        var ranges   = textView.selectedRanges
+        ranges.append(NSValue(range: NSRange(location: charIdx, length: 0)))
+        textView.selectedRanges = ranges
+    }
+}
+
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
