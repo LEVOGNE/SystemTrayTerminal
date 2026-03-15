@@ -1350,8 +1350,7 @@ test("Relaunch guard: successful open would allow exit") {
 // ============================================================================
 
 enum TokenType {
-    case keyword, string, comment, number, operator_, type_, identifier
-    case punctuation, literal, attribute, plain
+    case keyword, string, comment, number, operator_, type_, attribute, plain
 }
 
 struct SyntaxToken {
