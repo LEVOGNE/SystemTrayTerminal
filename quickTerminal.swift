@@ -14935,6 +14935,8 @@ class EditorView: NSView, NSTextViewDelegate {
     }
     required init?(coder: NSCoder) { fatalError() }
 
+    deinit { NotificationCenter.default.removeObserver(self) }
+
     // ── Load / Save ────────────────────────────────────────────────────────
     func loadFile(url: URL) throws {
         var enc: String.Encoding = .utf8
