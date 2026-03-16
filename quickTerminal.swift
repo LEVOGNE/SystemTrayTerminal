@@ -14274,6 +14274,11 @@ class EditorView: NSView {
         textView?.backgroundColor = bg
         textView?.textColor = fg
         textView?.insertionPointColor = fg
+        // modeBar overlay adapts to theme brightness
+        let isDark = bg.brightnessComponent < 0.5
+        modeBar?.layer?.backgroundColor = isDark
+            ? NSColor(calibratedWhite: 0.0, alpha: 0.35).cgColor
+            : NSColor(calibratedWhite: 0.0, alpha: 0.12).cgColor
     }
 
     func setInputMode(_ mode: EditorInputMode) {
@@ -14288,7 +14293,6 @@ class EditorView: NSView {
             textView.isEditable = true
         case .vim:
             modeBar.isHidden = false
-            updateVimModeBar()
             // start in normal mode — disable direct text editing
             setVimMode(.normal)
         }
@@ -14314,12 +14318,12 @@ class EditorView: NSView {
 
     override func layout() {
         super.layout()
-        guard let sv = scrollView, let tv = textView else { return }
-        let modeBarH: CGFloat = modeBar?.isHidden == false ? 26 : 0
+        guard let sv = scrollView, let tv = textView, let mb = modeBar else { return }
+        let modeBarH: CGFloat = mb.isHidden ? 0 : 26
         // Resize scrollView: top of view down to above modeBar
         sv.frame = NSRect(x: 0, y: modeBarH, width: bounds.width,
                           height: max(0, bounds.height - modeBarH))
-        modeBar?.frame.size.width = bounds.width
+        mb.frame.size.width = bounds.width
         let w = sv.contentSize.width
         tv.frame = NSRect(x: 0, y: 0, width: w,
                           height: max(tv.frame.height, sv.contentSize.height))
