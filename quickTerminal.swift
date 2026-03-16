@@ -15020,6 +15020,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if self.activeTab < self.tabEditorURLs.count {
                 self.tabEditorURLs[self.activeTab] = url
             }
+            if self.activeTab < self.tabEditorDirty.count {
+                self.tabEditorDirty[self.activeTab] = false
+            }
             if self.activeTab < self.tabCustomNames.count {
                 self.tabCustomNames[self.activeTab] = url.lastPathComponent
             }
