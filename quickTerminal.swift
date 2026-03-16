@@ -2821,7 +2821,7 @@ class TerminalView: NSView {
     var cellW: CGFloat
     var cellH: CGFloat
     var userCursorStyle = 0  // settings: 0=underline, 1=beam, 2=block (used when app sends DECSCUSR 0=default)
-    var userCursorBlink = false
+    var userCursorBlink = true
     let paddingX: CGFloat = 16
     let paddingY: CGFloat = 10
     var dirty = false
