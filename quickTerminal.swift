@@ -1034,7 +1034,7 @@ func applyTheme(_ t: TerminalTheme) {
     // Sync editor views to new theme
     if let delegate = NSApp.delegate as? AppDelegate {
         for ev in delegate.tabEditorViews.compactMap({ $0 }) {
-            ev.applyColors(bg: kDefaultBG, fg: kDefaultFG)
+            ev.applyColors(bg: NSColor(cgColor: kTermBgCGColor) ?? kDefaultBG, fg: kDefaultFG)
         }
     }
 }
@@ -4784,6 +4784,18 @@ class BorderlessWindow: NSWindow {
             if lastEdge != .none {
                 lastEdge = .none
                 (NSApp.delegate as? AppDelegate)?.handleBorderHover(nearEdge: false)
+            }
+
+        case .keyDown:
+            // Ctrl+1-9: Tab wechseln — intercept here so editor NSTextView doesn't swallow it
+            let flags = event.modifierFlags.intersection([.command, .option, .shift, .control])
+            if flags == .control, let d = NSApp.delegate as? AppDelegate,
+               d.activeTab < d.tabTypes.count, d.tabTypes[d.activeTab] == .editor {
+                let numKeyCodes: [UInt16: Int] = [18:0, 19:1, 20:2, 21:3, 23:4, 22:5, 26:6, 28:7, 25:8]
+                if let idx = numKeyCodes[event.keyCode] {
+                    d.switchToTab(idx)
+                    return
+                }
             }
 
         default:
@@ -14255,6 +14267,7 @@ class EditorView: NSView {
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false  // let window transparency show through
         addSubview(scrollView)
 
         let contentSize = scrollView.contentSize
@@ -14275,14 +14288,15 @@ class EditorView: NSView {
         textView.allowsUndo = true
         textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
 
-        applyColors(bg: NSColor(calibratedRed: 0.08, green: 0.08, blue: 0.10, alpha: 1),
-                    fg: NSColor(calibratedRed: 0.85, green: 0.85, blue: 0.90, alpha: 1))
+        // Use same semi-transparent bg as terminal (kTermBgCGColor) — overridden by applyTheme later
+        let initialBG = NSColor(cgColor: kTermBgCGColor) ?? NSColor(calibratedRed: 0.05, green: 0.05, blue: 0.08, alpha: 0.28)
+        applyColors(bg: initialBG, fg: NSColor(calibratedRed: 0.85, green: 0.85, blue: 0.90, alpha: 1))
 
         scrollView.documentView = textView
     }
 
     func applyColors(bg: NSColor, fg: NSColor) {
-        scrollView?.backgroundColor = bg
+        scrollView?.backgroundColor = .clear  // always clear — transparency via window
         textView?.backgroundColor = bg
         textView?.textColor = fg
         textView?.insertionPointColor = fg
@@ -14845,7 +14859,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let editorView = EditorView(frame: tf)
         editorView.autoresizingMask = [.width, .height]
 
-        editorView.applyColors(bg: kDefaultBG, fg: kDefaultFG)
+        editorView.applyColors(bg: NSColor(cgColor: kTermBgCGColor) ?? kDefaultBG, fg: kDefaultFG)
 
         if !splitContainers.isEmpty && activeTab < splitContainers.count {
             splitContainers[activeTab].isHidden = true
