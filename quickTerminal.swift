@@ -4797,6 +4797,20 @@ class BorderlessWindow: NSWindow {
                     return
                 }
             }
+            // Cmd+S / Cmd+Shift+S / Cmd+O: file operations (only when editor tab active)
+            if let d = NSApp.delegate as? AppDelegate,
+               d.activeTab < d.tabTypes.count, d.tabTypes[d.activeTab] == .editor {
+                let flags2 = event.modifierFlags.intersection([.command, .shift])
+                if flags2 == [.command, .shift], event.charactersIgnoringModifiers == "s" {
+                    d.saveCurrentEditorAs(); return
+                }
+                if flags2 == .command, event.charactersIgnoringModifiers == "s" {
+                    d.saveCurrentEditor(); return
+                }
+                if flags2 == .command, event.charactersIgnoringModifiers == "o" {
+                    d.openEditorFile(); return
+                }
+            }
 
         default:
             break
@@ -14445,6 +14459,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var tabTypes: [TabType] = []
     var tabEditorViews: [EditorView?] = []
     var tabEditorModes: [EditorInputMode] = []
+    var tabEditorURLs:  [URL?] = []
+    var tabEditorDirty: [Bool] = []
     var splitContainers: [SplitContainer] = []
     var activeTab = 0
     var statusItem: NSStatusItem!
@@ -14967,6 +14983,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tabTypes.append(.terminal)
         tabEditorViews.append(nil)
         tabEditorModes.append(.normal)
+        tabEditorURLs.append(nil)
+        tabEditorDirty.append(false)
         splitContainers.append(container)
         activeTab = termViews.count - 1
         container.alphaValue = 0
@@ -14989,9 +15007,54 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         saveSession()
     }
 
-    func openEditorFile() {}
-    func saveCurrentEditor() {}
-    func saveCurrentEditorAs() {}
+    func openEditorFile() {
+        guard activeTab < tabEditorViews.count, let ev = tabEditorViews[activeTab] else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.begin { [weak self] result in
+            guard let self = self, result == .OK, let url = panel.url else { return }
+            guard let content = try? String(contentsOf: url, encoding: .utf8) else { return }
+            ev.textView.string = content
+            if self.activeTab < self.tabEditorURLs.count {
+                self.tabEditorURLs[self.activeTab] = url
+            }
+            if self.activeTab < self.tabCustomNames.count {
+                self.tabCustomNames[self.activeTab] = url.lastPathComponent
+            }
+            self.updateHeaderTabs()
+        }
+    }
+
+    func saveCurrentEditor() {
+        guard activeTab < tabEditorViews.count, let ev = tabEditorViews[activeTab] else { return }
+        if activeTab < tabEditorURLs.count, let url = tabEditorURLs[activeTab] {
+            try? ev.textView.string.write(to: url, atomically: true, encoding: .utf8)
+            if activeTab < tabEditorDirty.count { tabEditorDirty[activeTab] = false }
+        } else {
+            saveCurrentEditorAs()
+        }
+    }
+
+    func saveCurrentEditorAs() {
+        guard activeTab < tabEditorViews.count, let ev = tabEditorViews[activeTab] else { return }
+        let panel = NSSavePanel()
+        panel.begin { [weak self] result in
+            guard let self = self, result == .OK, let url = panel.url else { return }
+            try? ev.textView.string.write(to: url, atomically: true, encoding: .utf8)
+            if self.activeTab < self.tabEditorURLs.count {
+                self.tabEditorURLs[self.activeTab] = url
+            }
+            if self.activeTab < self.tabCustomNames.count {
+                self.tabCustomNames[self.activeTab] = url.lastPathComponent
+            }
+            if self.activeTab < self.tabEditorDirty.count {
+                self.tabEditorDirty[self.activeTab] = false
+            }
+            self.updateHeaderTabs()
+        }
+    }
 
     func createEditorTab() {
         let tf = termFrame()
@@ -15018,6 +15081,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tabTypes.append(.editor)
         tabEditorViews.append(editorView)
         tabEditorModes.append(.normal)
+        tabEditorURLs.append(nil)
+        tabEditorDirty.append(false)
         splitContainers.append(placeholder)
         tabColors.append(NSColor(calibratedHue: CGFloat.random(in: 0...1),
                                   saturation: 0.65, brightness: 0.85, alpha: 1.0))
@@ -15059,6 +15124,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if index < tabTypes.count { tabTypes.remove(at: index) }
         if index < tabEditorViews.count { tabEditorViews.remove(at: index) }
         if index < tabEditorModes.count { tabEditorModes.remove(at: index) }
+        if index < tabEditorURLs.count  { tabEditorURLs.remove(at: index) }
+        if index < tabEditorDirty.count { tabEditorDirty.remove(at: index) }
         if index < tabColors.count { tabColors.remove(at: index) }
         if index < tabCustomNames.count { tabCustomNames.remove(at: index) }
         if index < tabGitPanels.count {
