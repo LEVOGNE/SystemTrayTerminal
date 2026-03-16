@@ -14217,6 +14217,70 @@ class OnboardingPanel: NSPanel {
     }
 }
 
+// MARK: - Text Editor
+
+class EditorView: NSView {
+
+    private(set) var textView: NSTextView!
+    private var scrollView: NSScrollView!
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        setup()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func setup() {
+        scrollView = NSScrollView(frame: bounds)
+        scrollView.autoresizingMask = [.width, .height]
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        addSubview(scrollView)
+
+        let contentSize = scrollView.contentSize
+        textView = NSTextView(frame: NSRect(origin: .zero, size: contentSize))
+        textView.minSize = NSSize(width: 0, height: contentSize.height)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                  height: CGFloat.greatestFiniteMagnitude)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.containerSize = NSSize(width: contentSize.width,
+                                                       height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.widthTracksTextView = true
+        textView.isRichText = false
+        textView.isContinuousSpellCheckingEnabled = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.allowsUndo = true
+        textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+
+        applyColors(bg: NSColor(calibratedRed: 0.08, green: 0.08, blue: 0.10, alpha: 1),
+                    fg: NSColor(calibratedRed: 0.85, green: 0.85, blue: 0.90, alpha: 1))
+
+        scrollView.documentView = textView
+    }
+
+    func applyColors(bg: NSColor, fg: NSColor) {
+        scrollView?.backgroundColor = bg
+        textView?.backgroundColor = bg
+        textView?.textColor = fg
+        textView?.insertionPointColor = fg
+    }
+
+    override func layout() {
+        super.layout()
+        guard let sv = scrollView, let tv = textView else { return }
+        let w = sv.contentSize.width
+        tv.frame = NSRect(x: 0, y: 0, width: w,
+                          height: max(tv.frame.height, sv.contentSize.height))
+        tv.textContainer?.containerSize = NSSize(width: w, height: CGFloat.greatestFiniteMagnitude)
+    }
+}
+
 // MARK: - Tab Types
 
 enum TabType {
@@ -14230,6 +14294,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var window: NSWindow!
     var termViews: [TerminalView?] = []
     var tabTypes: [TabType] = []
+    var tabEditorViews: [EditorView?] = []
     var splitContainers: [SplitContainer] = []
     var activeTab = 0
     var statusItem: NSStatusItem!
