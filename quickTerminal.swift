@@ -1031,6 +1031,12 @@ func applyTheme(_ t: TerminalTheme) {
         }
         return nsColorFromAnsi(i)
     }
+    // Sync editor views to new theme
+    if let delegate = NSApp.delegate as? AppDelegate {
+        for ev in delegate.tabEditorViews.compactMap({ $0 }) {
+            ev.applyColors(bg: kDefaultBG, fg: kDefaultFG)
+        }
+    }
 }
 
 func resolveSystemTheme() -> TerminalTheme {
