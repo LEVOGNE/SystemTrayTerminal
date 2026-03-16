@@ -4856,7 +4856,8 @@ class BorderlessWindow: NSWindow {
                     if vimFlags.isEmpty || vimFlags == .shift {
                         if ev.vimPendingColon {
                             let ch = event.charactersIgnoringModifiers ?? ""
-                            if ev.handleVimColonCommand(ch) { return }
+                            _ = ev.handleVimColonCommand(ch)
+                            return // always consume key after colon, regardless of match
                         }
                         if ev.handleVimTwoKeyOp(event) { return }
                         if ev.handleVimKey(event) { return }
@@ -14464,6 +14465,7 @@ class EditorView: NSView {
     func setVimMode(_ vm: VimSubMode) {
         vimMode = vm
         textView.isEditable = (vm == .insert)
+        if vm != .normal { vimPendingD = false; vimPendingY = false; vimPendingColon = false }
         updateVimModeBar()
     }
 
