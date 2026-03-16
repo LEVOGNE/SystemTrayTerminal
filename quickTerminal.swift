@@ -14820,6 +14820,58 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         saveSession()
     }
 
+    func createEditorTab() {
+        let tf = termFrame()
+
+        let editorView = EditorView(frame: tf)
+        editorView.autoresizingMask = [.width, .height]
+
+        editorView.applyColors(bg: kDefaultBG, fg: kDefaultFG)
+
+        if !splitContainers.isEmpty && activeTab < splitContainers.count {
+            splitContainers[activeTab].isHidden = true
+            if activeTab < tabGitPanels.count {
+                tabGitPanels[activeTab]?.isHidden = true
+                tabGitDividers[activeTab]?.isHidden = true
+            }
+        }
+
+        // Placeholder SplitContainer keeps all tab-index arrays aligned
+        let dummyTV = TerminalView(frameRect: tf, shell: "/bin/sh", cwd: nil, historyId: nil)
+        let placeholder = SplitContainer(frame: tf, primary: dummyTV)
+        placeholder.isHidden = true
+
+        termViews.append(nil)
+        tabTypes.append(.editor)
+        tabEditorViews.append(editorView)
+        splitContainers.append(placeholder)
+        tabColors.append(NSColor(calibratedHue: CGFloat.random(in: 0...1),
+                                  saturation: 0.65, brightness: 0.85, alpha: 1.0))
+        tabCustomNames.append("Editor")
+        tabGitPositions.append(.none)
+        tabGitPanels.append(nil)
+        tabGitDividers.append(nil)
+        tabGitRatios.append(gitDefaultRatioH)
+        tabGitRatiosV.append(gitDefaultRatioV)
+        tabGitRatiosH.append(gitDefaultRatioH)
+
+        activeTab = termViews.count - 1
+
+        editorView.alphaValue = 0
+        window.contentView?.addSubview(editorView)
+        window.makeFirstResponder(editorView.textView)
+
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            editorView.animator().alphaValue = 1
+        })
+
+        updateHeaderTabs()
+        updateFooter()
+        saveSession()
+    }
+
     func closeTab(index: Int) {
         guard index >= 0 && index < termViews.count && termViews.count > 1,
               index < splitContainers.count else { return }
