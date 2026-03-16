@@ -14228,7 +14228,8 @@ enum TabType {
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var window: NSWindow!
-    var termViews: [TerminalView] = []
+    var termViews: [TerminalView?] = []
+    var tabTypes: [TabType] = []
     var splitContainers: [SplitContainer] = []
     var activeTab = 0
     var statusItem: NSStatusItem!
@@ -14245,7 +14246,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// True if any TerminalView (primary or split secondary) has an active drag session
     private var isAnyDragSessionActive: Bool {
-        termViews.contains { $0.isDragSessionActive } ||
+        termViews.contains { $0?.isDragSessionActive == true } ||
         splitContainers.contains { $0.secondaryView?.isDragSessionActive == true }
     }
 
@@ -14530,7 +14531,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                let sec = container.secondaryView {
                 tv = sec
             } else {
-                tv = self.termViews[self.activeTab]
+                guard let atv = self.termViews[self.activeTab] else { return }
+                tv = atv
             }
             switch index {
             case 0: tv.switchToShell1(nil)
@@ -14695,7 +14697,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         tv.onShellExit = { [weak self, weak tv] in
             guard let self = self, let tv = tv else { return }
-            if let idx = self.termViews.firstIndex(where: { $0 === tv }) {
+            if let idx = self.termViews.firstIndex(where: { $0 === tv as TerminalView? }) {
                 if self.termViews.count > 1 {
                     self.closeTab(index: idx)
                 } else {
@@ -14730,6 +14732,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         termViews.append(tv)
+        tabTypes.append(.terminal)
         splitContainers.append(container)
         activeTab = termViews.count - 1
         container.alphaValue = 0
@@ -14758,6 +14761,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let container = splitContainers[index]
         termViews.remove(at: index)
         splitContainers.remove(at: index)
+        if index < tabTypes.count { tabTypes.remove(at: index) }
         if index < tabColors.count { tabColors.remove(at: index) }
         if index < tabCustomNames.count { tabCustomNames.remove(at: index) }
         if index < tabGitPanels.count {
@@ -14806,7 +14810,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         })
 
         if activeTab >= 0 && activeTab < termViews.count {
-            window.makeFirstResponder(termViews[activeTab])
+            if let tv = termViews[activeTab] { window.makeFirstResponder(tv) }
         }
         // Ensure new active tab's git panel is visible
         if activeTab < tabGitPanels.count {
@@ -14952,19 +14956,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if let v = value as? CGFloat { visualEffect.alphaValue = v }
         case "terminalFontSize":
             guard let size = value as? CGFloat else { return }
-            for tv in termViews { tv.updateFontSize(size) }
+            for tv in termViews { tv?.updateFontSize(size) }
             for sc in splitContainers {
                 if let sec = sc.secondaryView { sec.updateFontSize(size) }
             }
         case "cursorBlink":
             let blink = UserDefaults.standard.bool(forKey: "cursorBlink")
-            for tv in termViews { tv.userCursorBlink = blink; tv.setNeedsDisplay(tv.bounds) }
+            for tv in termViews { tv?.userCursorBlink = blink; if let tv = tv { tv.setNeedsDisplay(tv.bounds) } }
             for sc in splitContainers {
                 if let sec = sc.secondaryView { sec.userCursorBlink = blink; sec.setNeedsDisplay(sec.bounds) }
             }
         case "cursorStyle":
             guard let style = value as? Int else { return }
-            for tv in termViews { tv.userCursorStyle = style; tv.setNeedsDisplay(tv.bounds) }
+            for tv in termViews { tv?.userCursorStyle = style; if let tv = tv { tv.setNeedsDisplay(tv.bounds) } }
             for sc in splitContainers {
                 if let sec = sc.secondaryView { sec.userCursorStyle = style; sec.setNeedsDisplay(sec.bounds) }
             }
@@ -15028,7 +15032,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         case "fontFamily":
             let size = CGFloat(UserDefaults.standard.double(forKey: "terminalFontSize"))
-            for tv in termViews { tv.updateFontSize(size) }
+            for tv in termViews { tv?.updateFontSize(size) }
             for sc in splitContainers {
                 if let sec = sc.secondaryView { sec.updateFontSize(size) }
             }
@@ -15038,7 +15042,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let themeName = idx < themeNames.count ? themeNames[idx] : "default"
             UserDefaults.standard.set(themeName, forKey: "promptTheme")
             let themeDir = TerminalView.shellConfigDir + "/themes"
-            let allViews: [TerminalView] = termViews + splitContainers.compactMap { $0.secondaryView }
+            let allViews: [TerminalView] = termViews.compactMap { $0 } + splitContainers.compactMap { $0.secondaryView }
             for tv in allViews {
                 tv.writePTY(Data([0x15]))  // Ctrl+U clear line
                 tv.writePTY(" export QT_PROMPT_THEME='\(themeName)'; source '\(themeDir)/qt-theme-loader.sh'; clear\n")
@@ -15060,7 +15064,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             case 3:  applySystemThemeAppearance(to: visualEffect)
             default: visualEffect.appearance = NSAppearance(named: .darkAqua)
             }
-            for tv in termViews { tv.needsDisplay = true }
+            for tv in termViews { tv?.needsDisplay = true }
             for sc in splitContainers {
                 if let sec = sc.secondaryView { sec.needsDisplay = true }
             }
@@ -15109,7 +15113,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
             // 2. Clear all histories
             for tv in termViews {
-                tv.clearScrollback(nil)
+                tv?.clearScrollback(nil)
             }
 
             // 3. Close all tabs except the first, reset that one
@@ -15117,7 +15121,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let idx = termViews.count - 1
                 let container = splitContainers[idx]
                 let tv = termViews[idx]
-                if tv.childPid > 0 { kill(tv.childPid, SIGHUP) }
+                if let tv = tv, tv.childPid > 0 { kill(tv.childPid, SIGHUP) }
                 termViews.remove(at: idx)
                 splitContainers.remove(at: idx)
                 if idx < tabColors.count { tabColors.remove(at: idx) }
@@ -15130,8 +15134,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
 
             // 4. Restart shell in first tab
-            if !termViews.isEmpty {
-                let tv = termViews[0]
+            if !termViews.isEmpty, let tv = termViews[0] {
                 if tv.childPid > 0 { kill(tv.childPid, SIGHUP) }
                 tv.switchShell("/bin/zsh")
             }
@@ -15140,7 +15143,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.alphaValue = 0.99
             visualEffect.alphaValue = 0.96
             window.level = .floating
-            for tv in termViews { tv.userCursorStyle = 0; tv.updateFontSize(10.0) }
+            for tv in termViews { tv?.userCursorStyle = 0; tv?.updateFontSize(10.0) }
 
             // 6. Reset window size/position and center under tray icon
             let defaultSize = NSSize(width: 860, height: 480)
@@ -15365,7 +15368,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         headerView.setGitActive(activeTab < tabGitPositions.count && tabGitPositions[activeTab] != .none)
         updateSplitButtonState()
 
-        window.makeFirstResponder(termViews[activeTab])
+        if let tv = termViews[activeTab] { window.makeFirstResponder(tv) }
         clearSearchState()
         updateHeaderTabs()
         updateFooter()
@@ -15398,6 +15401,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if i < tabCustomNames.count, let custom = tabCustomNames[i] {
                 return custom
             }
+            guard let tv = tv else { return "~" }
             let pid = tv.childPid
             if pid > 0 {
                 let cwd = cwdForPid(pid)
@@ -15419,7 +15423,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
            let sec = container.secondaryView {
             tv = sec
         } else {
-            tv = termViews[activeTab]
+            guard let atv = termViews[activeTab] else { return }
+            tv = atv
         }
         let pid = tv.childPid
         if pid > 0 {
@@ -15558,7 +15563,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case 3:  applySystemThemeAppearance(to: visualEffect)
         default: visualEffect.appearance = NSAppearance(named: .darkAqua)
         }
-        for tv in termViews { tv.needsDisplay = true }
+        for tv in termViews { tv?.needsDisplay = true }
         for sc in splitContainers {
             if let sec = sc.secondaryView { sec.needsDisplay = true }
         }
@@ -15585,8 +15590,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self = self else { return }
             self.addTab()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                let tv = self.termViews[self.activeTab]
-                tv.writePTY(profile.connectCommand + "\n")
+                self.termViews[self.activeTab]?.writePTY(profile.connectCommand + "\n")
             }
         }
         superview.addSubview(view)
@@ -15674,8 +15678,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             layoutGitPanel()
 
             // Start refreshing with current cwd
-            let tv = termViews[activeTab]
-            let cwd = cwdForPid(tv.childPid)
+            let cwd: String
+            if let tv = termViews[activeTab] {
+                cwd = cwdForPid(tv.childPid)
+            } else {
+                cwd = NSHomeDirectory()
+            }
             tabGitPanels[activeTab]?.startRefreshing(cwd: cwd)
 
             // Fade in
@@ -15879,8 +15887,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard activeTab >= 0, activeTab < tabGitPositions.count,
               tabGitPositions[activeTab] != .none,
               let panel = tabGitPanels[activeTab] else { return }
-        let tv = termViews[activeTab]
-        let cwd = cwdForPid(tv.childPid)
+        let cwd: String
+        if let tv = termViews[activeTab] {
+            cwd = cwdForPid(tv.childPid)
+        } else {
+            cwd = NSHomeDirectory()
+        }
         panel.updateCwd(cwd)
     }
 
@@ -16118,7 +16130,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             PaletteCommand(title: "Auto-Dim (\(onOff("autoDim")))", shortcut: "") { [weak self] in self?.promptToggle("Auto-Dim", key: "autoDim") },
             PaletteCommand(title: "Clear", shortcut: "\u{2318}K") { [weak self] in
                 guard let self = self, !self.termViews.isEmpty else { return }
-                self.termViews[self.activeTab].clearScrollback(nil)
+                self.termViews[self.activeTab]?.clearScrollback(nil)
             },
             PaletteCommand(title: "Hide", shortcut: "Ctrl+<") { [weak self] in self?.toggleWindow() },
             PaletteCommand(title: "Help", shortcut: "?") { [weak self] in
@@ -16233,8 +16245,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func performScrollbackSearch(_ query: String) {
-        guard !termViews.isEmpty else { return }
-        let tv = termViews[activeTab]
+        guard !termViews.isEmpty, let tv = termViews[activeTab] else { return }
         let term = tv.terminal
         let q = query.lowercased()
         var highlights: [(row: Int, col: Int, len: Int)] = []
@@ -16764,9 +16775,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func activateAfterSnap() {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        if !termViews.isEmpty {
-            window.makeFirstResponder(termViews[activeTab])
-            termViews[activeTab].needsDisplay = true
+        if !termViews.isEmpty, let tv = termViews[activeTab] {
+            window.makeFirstResponder(tv)
+            tv.needsDisplay = true
         }
     }
 
@@ -16846,7 +16857,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func setCursorStyle(_ style: Int) {
         UserDefaults.standard.set(style, forKey: "cursorStyle")
-        for tv in termViews { tv.userCursorStyle = style; tv.setNeedsDisplay(tv.bounds) }
+        for tv in termViews { tv?.userCursorStyle = style; if let tv = tv { tv.setNeedsDisplay(tv.bounds) } }
         for sc in splitContainers {
             if let sec = sc.secondaryView { sec.userCursorStyle = style; sec.setNeedsDisplay(sec.bounds) }
         }
@@ -16960,7 +16971,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         // Suppress terminal resize during animation to preserve grid content
-        for tv in termViews { tv.suppressResize = true }
+        for tv in termViews { tv?.suppressResize = true }
         for sc in splitContainers { sc.secondaryView?.suppressResize = true }
 
         if isWindowDetached {
@@ -16971,7 +16982,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 window.animator().alphaValue = 0
             }, completionHandler: { [weak self] in
                 guard let self = self else { return }
-                for tv in self.termViews { tv.suppressResize = false }
+                for tv in self.termViews { tv?.suppressResize = false }
                 for sc in self.splitContainers { sc.secondaryView?.suppressResize = false }
                 self.window.orderOut(nil)
                 self.isAnimating = false
@@ -16987,7 +16998,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             guard let self = self else { return }
-            for tv in self.termViews { tv.suppressResize = false }
+            for tv in self.termViews { tv?.suppressResize = false }
             for sc in self.splitContainers { sc.secondaryView?.suppressResize = false }
             self.window.orderOut(nil)
             self.isAnimating = false
@@ -16996,18 +17007,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc func menuSwitchZsh()  {
-        guard !termViews.isEmpty else { return }
-        termViews[activeTab].switchToShell1(nil)
+        guard !termViews.isEmpty, let tv = termViews[activeTab] else { return }
+        tv.switchToShell1(nil)
         updateHeaderTabs(); updateFooter()
     }
     @objc func menuSwitchBash() {
-        guard !termViews.isEmpty else { return }
-        termViews[activeTab].switchToShell2(nil)
+        guard !termViews.isEmpty, let tv = termViews[activeTab] else { return }
+        tv.switchToShell2(nil)
         updateHeaderTabs(); updateFooter()
     }
     @objc func menuSwitchSh()   {
-        guard !termViews.isEmpty else { return }
-        termViews[activeTab].switchToShell3(nil)
+        guard !termViews.isEmpty, let tv = termViews[activeTab] else { return }
+        tv.switchToShell3(nil)
         updateHeaderTabs(); updateFooter()
     }
 
@@ -17024,7 +17035,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func windowDidBecomeKey(_ notification: Notification) {
         // Redraw terminal to show cursor
-        if activeTab < termViews.count { termViews[activeTab].needsDisplay = true }
+        if activeTab < termViews.count { termViews[activeTab]?.needsDisplay = true }
         guard !isAnimating else { return }
         guard UserDefaults.standard.bool(forKey: "autoDim") else { return }
         restoreWindowOpacity()
@@ -17032,7 +17043,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func windowDidResignKey(_ notification: Notification) {
         // Redraw terminal to hide cursor when window loses focus
-        if activeTab < termViews.count { termViews[activeTab].needsDisplay = true }
+        if activeTab < termViews.count { termViews[activeTab]?.needsDisplay = true }
         guard !isAnimating, window.isVisible else { return }
         guard UserDefaults.standard.bool(forKey: "autoDim") else { return }
         if isAnyDragSessionActive { return }
@@ -17241,6 +17252,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func saveSession() {
         var tabs: [[String: Any]] = []
         for (i, tv) in termViews.enumerated() {
+            guard let tv = tv else { continue }
             var info: [String: Any] = [
                 "shell": tv.currentShell,
                 "cwd": cwdForPid(tv.childPid),
