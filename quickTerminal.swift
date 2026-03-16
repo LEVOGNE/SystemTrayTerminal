@@ -6603,8 +6603,6 @@ class FooterBarView: NSView {
         rechtsContent.addSubview(toggleBadge)
 
         let badgeItems: [(keys: String, label: String, color: NSColor?)] = [
-            ("\u{2318}", "\u{2190}", NSColor(calibratedRed: 0.85, green: 0.75, blue: 0.5, alpha: 1.0)),
-            ("\u{2318}", "\u{2192}", NSColor(calibratedRed: 0.85, green: 0.75, blue: 0.5, alpha: 1.0)),
             ("\u{2325}", "\u{21E5}", NSColor(calibratedRed: 0.5, green: 0.85, blue: 0.5, alpha: 1.0)),
             ("\u{2318}", "T", nil), ("\u{2318}", "W", nil),
             ("\u{2318}", "D", nil), ("\u{2318}\u{21E7}", "D", nil),
@@ -6613,13 +6611,11 @@ class FooterBarView: NSView {
             let badge = BadgeButton(keys: item.keys, label: item.label, accentColor: item.color)
             rechtsContent.addSubview(badge)
             switch i {
-            case 0: badge.onClick = { [weak self] in self?.onPrevTab?() }
-            case 1: badge.onClick = { [weak self] in self?.onNextTab?() }
-            case 2: badge.onClick = { [weak self] in self?.onSwitchSplitPane?() }
-            case 3: badge.onClick = { [weak self] in self?.onNewTab?() }
-            case 4: badge.onClick = { [weak self] in self?.onCloseTab?() }
-            case 5: badge.onClick = { [weak self] in self?.onSplitV?() }
-            case 6: badge.onClick = { [weak self] in self?.onSplitH?() }
+            case 0: badge.onClick = { [weak self] in self?.onSwitchSplitPane?() }
+            case 1: badge.onClick = { [weak self] in self?.onNewTab?() }
+            case 2: badge.onClick = { [weak self] in self?.onCloseTab?() }
+            case 3: badge.onClick = { [weak self] in self?.onSplitV?() }
+            case 4: badge.onClick = { [weak self] in self?.onSplitH?() }
             default: break
             }
             tabShortcutBadges.append(badge)
@@ -6657,6 +6653,7 @@ class FooterBarView: NSView {
             lx += ubSz.width + gap
         }
         for btn in shellButtons {
+            if btn.isHidden { continue }
             btn.frame = NSRect(x: lx, y: cy - itemH / 2, width: shellBtnW, height: itemH)
             lx += shellBtnW + gap
         }
@@ -6672,6 +6669,7 @@ class FooterBarView: NSView {
         rx += tbW + badgeGap
 
         for badge in tabShortcutBadges {
+            if badge.isHidden { continue }
             let sz = badge.fittingSize
             let bw = max(sz.width, 30)
             let bh = max(sz.height, 22)
@@ -6721,6 +6719,17 @@ class FooterBarView: NSView {
             let isActive = (i < shellPaths.count && shell == shellPaths[i])
             btn.setActive(isActive)
         }
+    }
+
+    func setEditorMode(_ isEditor: Bool) {
+        for btn in shellButtons { btn.isHidden = isEditor }
+        // [0]=⌥⇥  [1]=⌘T  [2]=⌘W  [3]=⌘D  [4]=⌘⇧D
+        if tabShortcutBadges.count > 4 {
+            tabShortcutBadges[0].isHidden = isEditor  // ⌥⇥ split pane
+            tabShortcutBadges[3].isHidden = isEditor  // ⌘D split V
+            tabShortcutBadges[4].isHidden = isEditor  // ⌘⇧D split H
+        }
+        needsLayout = true
     }
 }
 
@@ -15557,6 +15566,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func updateFooter() {
         guard !termViews.isEmpty && activeTab < termViews.count else { return }
+        let isEditor = activeTab < tabTypes.count && tabTypes[activeTab] == .editor
+        footerView.setEditorMode(isEditor)
+        if isEditor { return }
         // Use the focused pane (may be secondary in split mode)
         let container = splitContainers[activeTab]
         let tv: TerminalView
