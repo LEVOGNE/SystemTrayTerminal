@@ -14465,7 +14465,7 @@ class EditorView: NSView {
     func setVimMode(_ vm: VimSubMode) {
         vimMode = vm
         textView.isEditable = (vm == .insert)
-        if vm != .normal { vimPendingD = false; vimPendingY = false; vimPendingColon = false }
+        if vm == .normal { vimPendingD = false; vimPendingY = false; vimPendingColon = false }
         updateVimModeBar()
     }
 
@@ -15194,7 +15194,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func openEditorFile() {
-        guard activeTab < tabEditorViews.count, let ev = tabEditorViews[activeTab] else { return }
+        let capturedTab = activeTab
+        guard capturedTab < tabEditorViews.count, let ev = tabEditorViews[capturedTab] else { return }
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
@@ -15203,14 +15204,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self = self, result == .OK, let url = panel.url else { return }
             guard let content = try? String(contentsOf: url, encoding: .utf8) else { return }
             ev.textView.string = content
-            if self.activeTab < self.tabEditorURLs.count {
-                self.tabEditorURLs[self.activeTab] = url
+            if capturedTab < self.tabEditorURLs.count {
+                self.tabEditorURLs[capturedTab] = url
             }
-            if self.activeTab < self.tabEditorDirty.count {
-                self.tabEditorDirty[self.activeTab] = false
+            if capturedTab < self.tabEditorDirty.count {
+                self.tabEditorDirty[capturedTab] = false
             }
-            if self.activeTab < self.tabCustomNames.count {
-                self.tabCustomNames[self.activeTab] = url.lastPathComponent
+            if capturedTab < self.tabCustomNames.count {
+                self.tabCustomNames[capturedTab] = url.lastPathComponent
             }
             self.updateHeaderTabs()
         }
@@ -15227,19 +15228,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func saveCurrentEditorAs() {
-        guard activeTab < tabEditorViews.count, let ev = tabEditorViews[activeTab] else { return }
+        let capturedTab = activeTab
+        guard capturedTab < tabEditorViews.count, let ev = tabEditorViews[capturedTab] else { return }
         let panel = NSSavePanel()
         panel.begin { [weak self] result in
             guard let self = self, result == .OK, let url = panel.url else { return }
             try? ev.textView.string.write(to: url, atomically: true, encoding: .utf8)
-            if self.activeTab < self.tabEditorURLs.count {
-                self.tabEditorURLs[self.activeTab] = url
+            if capturedTab < self.tabEditorURLs.count {
+                self.tabEditorURLs[capturedTab] = url
             }
-            if self.activeTab < self.tabCustomNames.count {
-                self.tabCustomNames[self.activeTab] = url.lastPathComponent
+            if capturedTab < self.tabCustomNames.count {
+                self.tabCustomNames[capturedTab] = url.lastPathComponent
             }
-            if self.activeTab < self.tabEditorDirty.count {
-                self.tabEditorDirty[self.activeTab] = false
+            if capturedTab < self.tabEditorDirty.count {
+                self.tabEditorDirty[capturedTab] = false
             }
             self.updateHeaderTabs()
         }
@@ -15262,7 +15264,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         // Placeholder SplitContainer keeps all tab-index arrays aligned
-        let dummyTV = TerminalView(frameRect: tf, shell: "/bin/sh", cwd: nil, historyId: nil)
+        let dummyTV = TerminalView(frameRect: tf, shell: "/usr/bin/true", cwd: nil, historyId: nil)
         let placeholder = SplitContainer(frame: tf, primary: dummyTV)
         placeholder.isHidden = true
 
@@ -17830,7 +17832,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func saveSession() {
         var tabs: [[String: Any]] = []
         for (i, tv) in termViews.enumerated() {
-            guard let tv = tv else { continue }
+            guard let tv = tv else {
+                // Editor tab — save type, URL, and mode
+                if i < tabTypes.count, tabTypes[i] == .editor {
+                    var t: [String: Any] = ["type": "editor"]
+                    if i < tabEditorURLs.count, let url = tabEditorURLs[i] { t["editorURL"] = url.path }
+                    if i < tabEditorModes.count {
+                        switch tabEditorModes[i] {
+                        case .normal: t["editorMode"] = "normal"
+                        case .nano:   t["editorMode"] = "nano"
+                        case .vim:    t["editorMode"] = "vim"
+                        }
+                    }
+                    if i < tabCustomNames.count, let n = tabCustomNames[i] { t["customName"] = n }
+                    tabs.append(t)
+                }
+                continue
+            }
             var info: [String: Any] = [
                 "shell": tv.currentShell,
                 "cwd": cwdForPid(tv.childPid),
@@ -17897,6 +17915,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let savedActive = UserDefaults.standard.integer(forKey: "sessionActiveTab")
 
         for tabInfo in tabs {
+            let tabType = tabInfo["type"] as? String
+
+            if tabType == "editor" {
+                createEditorTab()
+                if let urlPath = tabInfo["editorURL"] as? String {
+                    let url = URL(fileURLWithPath: urlPath)
+                    let tabIdx = termViews.count - 1
+                    if let content = try? String(contentsOf: url, encoding: .utf8),
+                       tabIdx < tabEditorViews.count, let ev = tabEditorViews[tabIdx] {
+                        ev.textView.string = content
+                        tabEditorURLs[tabIdx] = url
+                        tabCustomNames[tabIdx] = url.lastPathComponent
+                    }
+                }
+                if let modeName = tabInfo["editorMode"] as? String,
+                   let tabIdx = termViews.indices.last,
+                   tabIdx < tabEditorModes.count {
+                    switch modeName {
+                    case "nano": tabEditorModes[tabIdx] = .nano
+                    case "vim":  tabEditorModes[tabIdx] = .vim
+                    default:     tabEditorModes[tabIdx] = .normal
+                    }
+                }
+                if let customName = tabInfo["customName"] as? String {
+                    let idx = tabCustomNames.count - 1
+                    if idx >= 0 { tabCustomNames[idx] = customName }
+                }
+                continue
+            }
+
             let shell = tabInfo["shell"] as? String ?? "/bin/zsh"
             let cwd = tabInfo["cwd"] as? String
             let hue = tabInfo["colorHue"] as? Double
