@@ -7,6 +7,7 @@ import Darwin
 import Darwin.POSIX
 import Security
 import AVKit
+import WebKit
 
 // MARK: - Version
 
@@ -219,10 +220,12 @@ enum Loc {
     // MARK: Editor
     static var newTabMenuTerminal: String { t("newTabMenuTerminal") }
     static var newTabMenuEditor: String   { t("newTabMenuEditor") }
-    static var editorOpen: String         { t("editorOpen") }
-    static var editorSave: String         { t("editorSave") }
-    static var editorSaveAs: String       { t("editorSaveAs") }
     static var nanoModeBar: String        { t("nanoModeBar") }
+    static var unsavedTitle: String       { t("unsavedTitle") }
+    static var unsavedMessage: String     { t("unsavedMessage") }
+    static var unsavedSave: String        { t("unsavedSave") }
+    static var unsavedDiscard: String     { t("unsavedDiscard") }
+    static var unsavedCancel: String      { t("unsavedCancel") }
     static var vimNormal: String          { t("vimNormal") }
     static var vimInsert: String          { t("vimInsert") }
     static var editorTabName: String      { t("editorTabName") }
@@ -293,8 +296,9 @@ enum Loc {
             "sshConnPh": "user@host  or  user@host:port  *",
             "sshKeyPh": "~/.ssh/id_rsa  (optional – leave empty for password auth)",
             "newTabMenuTerminal": "Terminal", "newTabMenuEditor": "Text Editor",
-            "editorOpen": "Open", "editorSave": "Save", "editorSaveAs": "Save As",
             "nanoModeBar": "^S Save   ^X Close   ^K Cut Line   ^U Paste",
+            "unsavedTitle": "Unsaved Changes", "unsavedMessage": "Save changes before closing?",
+            "unsavedSave": "Save", "unsavedDiscard": "Discard", "unsavedCancel": "Cancel",
             "vimNormal": "── NORMAL ──", "vimInsert": "── INSERT ──",
             "editorTabName": "Editor", "newEditorTab": "New Editor Tab",
         ],
@@ -361,8 +365,9 @@ enum Loc {
             "sshConnPh": "user@host  oder  user@host:port  *",
             "sshKeyPh": "~/.ssh/id_rsa  (optional – leer lassen für Passwort-Auth)",
             "newTabMenuTerminal": "Terminal", "newTabMenuEditor": "Text-Editor",
-            "editorOpen": "Öffnen", "editorSave": "Speichern", "editorSaveAs": "Speichern als",
             "nanoModeBar": "^S Speichern   ^X Schließen   ^K Zeile ausschneiden   ^U Einfügen",
+            "unsavedTitle": "Ungespeicherte Änderungen", "unsavedMessage": "Änderungen speichern bevor du schließt?",
+            "unsavedSave": "Speichern", "unsavedDiscard": "Verwerfen", "unsavedCancel": "Abbrechen",
             "vimNormal": "── NORMAL ──", "vimInsert": "── EINFÜGEN ──",
             "editorTabName": "Editor", "newEditorTab": "Neuer Editor-Tab",
         ],
@@ -429,8 +434,9 @@ enum Loc {
             "sshConnPh": "kullanıcı@host  veya  kullanıcı@host:port  *",
             "sshKeyPh": "~/.ssh/id_rsa  (isteğe bağlı – şifre için boş bırakın)",
             "newTabMenuTerminal": "Terminal", "newTabMenuEditor": "Metin Editörü",
-            "editorOpen": "Aç", "editorSave": "Kaydet", "editorSaveAs": "Farklı Kaydet",
             "nanoModeBar": "^S Kaydet   ^X Kapat   ^K Satır Kes   ^U Yapıştır",
+            "unsavedTitle": "Kaydedilmemiş Değişiklikler", "unsavedMessage": "Kapatmadan önce kaydedilsin mi?",
+            "unsavedSave": "Kaydet", "unsavedDiscard": "Vazgeç", "unsavedCancel": "İptal",
             "vimNormal": "── NORMAL ──", "vimInsert": "── EKLE ──",
             "editorTabName": "Editör", "newEditorTab": "Yeni Editör Sekmesi",
         ],
@@ -497,8 +503,9 @@ enum Loc {
             "sshConnPh": "usuario@host  o  usuario@host:puerto  *",
             "sshKeyPh": "~/.ssh/id_rsa  (opcional – dejar vacío para auth por contraseña)",
             "newTabMenuTerminal": "Terminal", "newTabMenuEditor": "Editor de Texto",
-            "editorOpen": "Abrir", "editorSave": "Guardar", "editorSaveAs": "Guardar Como",
             "nanoModeBar": "^S Guardar   ^X Cerrar   ^K Cortar Línea   ^U Pegar",
+            "unsavedTitle": "Cambios sin guardar", "unsavedMessage": "¿Guardar antes de cerrar?",
+            "unsavedSave": "Guardar", "unsavedDiscard": "Descartar", "unsavedCancel": "Cancelar",
             "vimNormal": "── NORMAL ──", "vimInsert": "── INSERTAR ──",
             "editorTabName": "Editor", "newEditorTab": "Nueva Pestaña de Editor",
         ],
@@ -565,8 +572,9 @@ enum Loc {
             "sshConnPh": "utilisateur@hôte  ou  utilisateur@hôte:port  *",
             "sshKeyPh": "~/.ssh/id_rsa  (optionnel – laisser vide pour auth par mot de passe)",
             "newTabMenuTerminal": "Terminal", "newTabMenuEditor": "Éditeur de Texte",
-            "editorOpen": "Ouvrir", "editorSave": "Enregistrer", "editorSaveAs": "Enregistrer Sous",
             "nanoModeBar": "^S Enregistrer   ^X Fermer   ^K Couper Ligne   ^U Coller",
+            "unsavedTitle": "Modifications non enregistrées", "unsavedMessage": "Enregistrer avant de fermer ?",
+            "unsavedSave": "Enregistrer", "unsavedDiscard": "Ignorer", "unsavedCancel": "Annuler",
             "vimNormal": "── NORMAL ──", "vimInsert": "── INSÉRER ──",
             "editorTabName": "Éditeur", "newEditorTab": "Nouvel Onglet Éditeur",
         ],
@@ -633,8 +641,9 @@ enum Loc {
             "sshConnPh": "utente@host  o  utente@host:porta  *",
             "sshKeyPh": "~/.ssh/id_rsa  (opzionale – lasciare vuoto per auth con password)",
             "newTabMenuTerminal": "Terminale", "newTabMenuEditor": "Editor di Testo",
-            "editorOpen": "Apri", "editorSave": "Salva", "editorSaveAs": "Salva Come",
             "nanoModeBar": "^S Salva   ^X Chiudi   ^K Taglia Riga   ^U Incolla",
+            "unsavedTitle": "Modifiche non salvate", "unsavedMessage": "Salvare prima di chiudere?",
+            "unsavedSave": "Salva", "unsavedDiscard": "Scarta", "unsavedCancel": "Annulla",
             "vimNormal": "── NORMALE ──", "vimInsert": "── INSERISCI ──",
             "editorTabName": "Editor", "newEditorTab": "Nuova Scheda Editor",
         ],
@@ -701,8 +710,9 @@ enum Loc {
             "sshConnPh": "مستخدم@مضيف  أو  مستخدم@مضيف:منفذ  *",
             "sshKeyPh": "~/.ssh/id_rsa  (اختياري – اتركه فارغاً لاستخدام كلمة المرور)",
             "newTabMenuTerminal": "الطرفية", "newTabMenuEditor": "محرر النصوص",
-            "editorOpen": "فتح", "editorSave": "حفظ", "editorSaveAs": "حفظ باسم",
             "nanoModeBar": "^S حفظ   ^X إغلاق   ^K قص سطر   ^U لصق",
+            "unsavedTitle": "تغييرات غير محفوظة", "unsavedMessage": "حفظ قبل الإغلاق؟",
+            "unsavedSave": "حفظ", "unsavedDiscard": "تجاهل", "unsavedCancel": "إلغاء",
             "vimNormal": "── عادي ──", "vimInsert": "── إدراج ──",
             "editorTabName": "محرر", "newEditorTab": "تبويب محرر جديد",
         ],
@@ -769,8 +779,9 @@ enum Loc {
             "sshConnPh": "ユーザー@ホスト  または  ユーザー@ホスト:ポート  *",
             "sshKeyPh": "~/.ssh/id_rsa  (任意 – パスワード認証は空のまま)",
             "newTabMenuTerminal": "ターミナル", "newTabMenuEditor": "テキストエディタ",
-            "editorOpen": "開く", "editorSave": "保存", "editorSaveAs": "別名で保存",
             "nanoModeBar": "^S 保存   ^X 閉じる   ^K 行を切り取る   ^U 貼り付け",
+            "unsavedTitle": "未保存の変更", "unsavedMessage": "閉じる前に保存しますか？",
+            "unsavedSave": "保存", "unsavedDiscard": "破棄", "unsavedCancel": "キャンセル",
             "vimNormal": "── NORMAL ──", "vimInsert": "── 挿入 ──",
             "editorTabName": "エディタ", "newEditorTab": "新しいエディタタブ",
         ],
@@ -837,8 +848,9 @@ enum Loc {
             "sshConnPh": "用户@主机  或  用户@主机:端口  *",
             "sshKeyPh": "~/.ssh/id_rsa  (可选 – 留空则使用密码认证)",
             "newTabMenuTerminal": "终端", "newTabMenuEditor": "文本编辑器",
-            "editorOpen": "打开", "editorSave": "保存", "editorSaveAs": "另存为",
             "nanoModeBar": "^S 保存   ^X 关闭   ^K 剪切行   ^U 粘贴",
+            "unsavedTitle": "未保存的更改", "unsavedMessage": "关闭前是否保存？",
+            "unsavedSave": "保存", "unsavedDiscard": "丢弃", "unsavedCancel": "取消",
             "vimNormal": "── 普通 ──", "vimInsert": "── 插入 ──",
             "editorTabName": "编辑器", "newEditorTab": "新建编辑器标签页",
         ],
@@ -905,8 +917,9 @@ enum Loc {
             "sshConnPh": "пользователь@хост  или  пользователь@хост:порт  *",
             "sshKeyPh": "~/.ssh/id_rsa  (необязательно – оставьте пустым для пароля)",
             "newTabMenuTerminal": "Терминал", "newTabMenuEditor": "Текстовый редактор",
-            "editorOpen": "Открыть", "editorSave": "Сохранить", "editorSaveAs": "Сохранить как",
             "nanoModeBar": "^S Сохранить   ^X Закрыть   ^K Вырезать строку   ^U Вставить",
+            "unsavedTitle": "Несохранённые изменения", "unsavedMessage": "Сохранить перед закрытием?",
+            "unsavedSave": "Сохранить", "unsavedDiscard": "Отклонить", "unsavedCancel": "Отмена",
             "vimNormal": "── NORMAL ──", "vimInsert": "── ВСТАВКА ──",
             "editorTabName": "Редактор", "newEditorTab": "Новая вкладка редактора",
         ],
@@ -2665,19 +2678,10 @@ class Terminal {
                     workCursorY -= pushable
                     workRows -= pushable
                 }
-            } else if newRows > rows {
-                // Grow: pull rows from scrollback back onto the screen top.
-                let needed = newRows - rows
-                let available = min(needed, scrollback.count)
-                if available > 0 {
-                    let pulled = Array(scrollback.suffix(available))
-                    scrollback.removeLast(available)
-                    workGrid = pulled + workGrid
-                    workLineAttrs = Array(repeating: UInt8(0), count: available) + workLineAttrs
-                    workCursorY += available
-                    workRows += available
-                }
             }
+            // Grow: new empty rows are added at the bottom (handled by newGrid construction
+            // below). Do NOT pull from scrollback — that shifts the cursor down, causing a
+            // visual duplicate and confusing the active shell process.
         }
 
         // Column reflow: re-wrap soft-wrapped logical lines at new column width (main screen only)
@@ -4738,30 +4742,57 @@ class BorderlessWindow: NSWindow {
 
         switch edge {
         case .bottom:
-            // Full height
-            target.origin.y = vis.origin.y
-            target.size.height = vis.height
+            if isDetached {
+                // Detached: full height
+                target.origin.y = vis.origin.y
+                target.size.height = vis.height
+            } else {
+                // Docked: expand downward, keep top edge fixed (arrow stays over tray icon)
+                let topEdge = frame.maxY
+                target.origin.y = vis.origin.y
+                target.size.height = topEdge - vis.origin.y
+                // origin.x and width unchanged
+            }
         case .left:
-            // Full height, snap left half
-            target.origin.x = vis.origin.x
-            target.origin.y = vis.origin.y
-            target.size.width = vis.width / 2
-            target.size.height = vis.height
+            if isDetached {
+                // Detached: snap to left half of screen
+                target.origin.x = vis.origin.x
+                target.origin.y = vis.origin.y
+                target.size.width = vis.width / 2
+                target.size.height = vis.height
+            } else {
+                // Docked: expand width to the left, keep right edge + arrow fixed.
+                // The arrow is anchored to the tray icon via (trayScreenX - window.origin.x),
+                // so fixing the right edge keeps the arrow in place.
+                let rightEdge = frame.maxX
+                target.origin.x = vis.origin.x
+                target.size.width = min(rightEdge - vis.origin.x, vis.width)
+                // Y and height unchanged — user asked for wider, not taller
+            }
         case .right:
-            // Full height, snap right half
-            target.origin.x = vis.origin.x + vis.width / 2
-            target.origin.y = vis.origin.y
-            target.size.width = vis.width / 2
-            target.size.height = vis.height
+            if isDetached {
+                // Detached: snap to right half of screen
+                target.origin.x = vis.origin.x + vis.width / 2
+                target.origin.y = vis.origin.y
+                target.size.width = vis.width / 2
+                target.size.height = vis.height
+            } else {
+                // Docked: expand width to the right, keep left edge fixed
+                let leftEdge = frame.origin.x
+                target.size.width = min(vis.maxX - leftEdge, vis.width)
+                // origin.x, Y and height unchanged
+            }
         case .top, .topLeft, .topRight, .bottomLeft, .bottomRight, .none:
             // Full screen
             target = vis
         }
 
-        NSAnimationContext.runAnimationGroup { ctx in
+        NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.2
             self.animator().setFrame(target, display: true)
-        }
+        }, completionHandler: {
+            (NSApp.delegate as? AppDelegate)?.saveWindowSize()
+        })
     }
 
     /// NW↔SE diagonal resize cursor (topLeft, bottomRight)
@@ -4841,6 +4872,8 @@ class BorderlessWindow: NSWindow {
         case .leftMouseUp:
             if activeEdge != .none {
                 activeEdge = .none
+                // Persist final size immediately after edge drag ends
+                (NSApp.delegate as? AppDelegate)?.saveWindowSize()
                 return
             }
 
@@ -5146,6 +5179,113 @@ class HoverButton: NSView {
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
     override func accessibilityLabel() -> String? { label.stringValue }
+}
+
+// Icon-only button using SF Symbols — language-independent
+class SymbolHoverButton: NSView {
+    var onClick: (() -> Void)?
+    private var trackingArea: NSTrackingArea?
+    private var isHovered = false
+    private var isPressed = false
+    private let normalColor: NSColor
+    private let hoverColor:  NSColor
+    private let normalBg:    CGColor
+    private let hoverBg:     CGColor
+    private let pressBg:     CGColor
+    private let imageView:   NSImageView
+
+    init(symbolName: String, size: CGFloat = 12,
+         normalColor: NSColor, hoverColor: NSColor,
+         normalBg: NSColor  = .clear,
+         hoverBg:  NSColor  = NSColor(calibratedWhite: 1.0, alpha: 0.1),
+         pressBg:  NSColor  = NSColor(calibratedWhite: 1.0, alpha: 0.2),
+         cornerRadius: CGFloat = 4) {
+        self.normalColor = normalColor
+        self.hoverColor  = hoverColor
+        self.normalBg    = normalBg.cgColor
+        self.hoverBg     = hoverBg.cgColor
+        self.pressBg     = pressBg.cgColor
+
+        let cfg = NSImage.SymbolConfiguration(pointSize: size, weight: .medium)
+        let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+            .withSymbolConfiguration(cfg) ?? NSImage()
+        imageView = NSImageView(image: img)
+        imageView.contentTintColor = normalColor
+        imageView.imageScaling = .scaleProportionallyDown
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = cornerRadius
+        layer?.backgroundColor = self.normalBg
+        addSubview(imageView)
+        NSLayoutConstraint.activate([
+            imageView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            imageView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            imageView.widthAnchor.constraint(equalToConstant: size + 2),
+            imageView.heightAnchor.constraint(equalToConstant: size + 2),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let t = trackingArea { removeTrackingArea(t) }
+        trackingArea = NSTrackingArea(rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInActiveApp],
+            owner: self, userInfo: nil)
+        addTrackingArea(trackingArea!)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        imageView.contentTintColor = hoverColor
+        animateBg(to: hoverBg)
+    }
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        imageView.contentTintColor = isPressed ? hoverColor : normalColor
+        animateBg(to: isPressed ? pressBg : normalBg)
+    }
+    override func mouseDown(with event: NSEvent) {
+        isPressed = true
+        animateBg(to: pressBg, duration: 0.06)
+    }
+    override func mouseUp(with event: NSEvent) {
+        isPressed = false
+        let loc = convert(event.locationInWindow, from: nil)
+        if bounds.contains(loc) {
+            animateBg(to: hoverBg, duration: 0.12)
+            onClick?()
+        } else {
+            imageView.contentTintColor = normalColor
+            animateBg(to: normalBg)
+        }
+    }
+
+    private func animateBg(to color: CGColor, duration: CFTimeInterval = 0.15) {
+        let anim = CABasicAnimation(keyPath: "backgroundColor")
+        anim.fromValue = layer?.presentation()?.backgroundColor ?? layer?.backgroundColor
+        anim.toValue   = color
+        anim.duration  = duration
+        anim.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer?.add(anim, forKey: "bg")
+        layer?.backgroundColor = color
+    }
+
+    var isActive: Bool = false
+    func setActive(_ active: Bool) {
+        isActive = active
+        guard !isHovered else { return }
+        imageView.contentTintColor = active ? hoverColor : normalColor
+        animateBg(to: active ? hoverBg : normalBg, duration: 0.25)
+    }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { toolTip }
 }
 
 class TabCloseButton: NSView {
@@ -5542,14 +5682,17 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
     private var tabContainer = NSView()
     private let tabScrollView = NSScrollView()
     private var addBtn: HoverButton!
-    private var fileOpenBtn: HoverButton!
-    private var fileSaveBtn: HoverButton!
-    private var fileSaveAsBtn: HoverButton!
+    private var fileOpenBtn: SymbolHoverButton!
+    private var fileSaveBtn: SymbolHoverButton!
+    private var fileSaveAsBtn: SymbolHoverButton!
+    private var previewBtn: SymbolHoverButton!
+    var onPreviewToggle: (() -> Void)?
     private var splitVBtn: SplitIconButton!
     private var splitHBtn: SplitIconButton!
     private var gitBtn: HoverButton!
     private var webPickerBtn: HoverButton!
     private var sshBtn: HoverButton!
+    private var rightStack: NSStackView!
     private let sep = NSView()
     private var lastTitles: [String] = []
     private var lastActiveIndex: Int = -1
@@ -5605,45 +5748,84 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
         addBtn.translatesAutoresizingMaskIntoConstraints = false
         addSubview(addBtn)
 
-        // File operation buttons (shown only for editor tabs)
-        let fileGray    = NSColor(calibratedWhite: 0.5, alpha: 1.0)
-        let fileHover   = NSColor(calibratedRed: 0.35, green: 0.65, blue: 1.0, alpha: 1.0)
-        let fileHoverBg = NSColor(calibratedRed: 0.3, green: 0.55, blue: 1.0, alpha: 0.12)
+        // File operation buttons (shown only for editor tabs) — SF Symbol icons, language-independent
+        let fileGray      = NSColor(calibratedWhite: 0.5, alpha: 1.0)
+        let fileHover     = NSColor(calibratedRed: 0.35, green: 0.65, blue: 1.0, alpha: 1.0)
+        let fileHoverBg   = NSColor(calibratedRed: 0.3, green: 0.55, blue: 1.0, alpha: 0.12)
         let filePressedBg = NSColor(calibratedRed: 0.3, green: 0.55, blue: 1.0, alpha: 0.25)
 
-        fileOpenBtn = HoverButton(title: Loc.editorOpen, fontSize: 9, weight: .bold,
-            normalColor: fileGray, hoverColor: fileHover, hoverBg: fileHoverBg,
-            pressBg: filePressedBg, cornerRadius: 4)
+        fileOpenBtn = SymbolHoverButton(symbolName: "folder", size: 11,
+            normalColor: fileGray, hoverColor: fileHover,
+            hoverBg: fileHoverBg, pressBg: filePressedBg)
+        fileOpenBtn.toolTip = "Open File"
         fileOpenBtn.onClick = { [weak self] in self?.onFileOpen?() }
-        fileOpenBtn.translatesAutoresizingMaskIntoConstraints = false
         fileOpenBtn.isHidden = true
-        addSubview(fileOpenBtn)
 
-        fileSaveBtn = HoverButton(title: Loc.editorSave, fontSize: 9, weight: .bold,
-            normalColor: fileGray, hoverColor: fileHover, hoverBg: fileHoverBg,
-            pressBg: filePressedBg, cornerRadius: 4)
+        fileSaveBtn = SymbolHoverButton(symbolName: "square.and.arrow.down", size: 11,
+            normalColor: fileGray, hoverColor: fileHover,
+            hoverBg: fileHoverBg, pressBg: filePressedBg)
+        fileSaveBtn.toolTip = "Save (Cmd+S)"
         fileSaveBtn.onClick = { [weak self] in self?.onFileSave?() }
-        fileSaveBtn.translatesAutoresizingMaskIntoConstraints = false
         fileSaveBtn.isHidden = true
-        addSubview(fileSaveBtn)
 
-        fileSaveAsBtn = HoverButton(title: Loc.editorSaveAs, fontSize: 9, weight: .bold,
-            normalColor: fileGray, hoverColor: fileHover, hoverBg: fileHoverBg,
-            pressBg: filePressedBg, cornerRadius: 4)
+        fileSaveAsBtn = SymbolHoverButton(symbolName: "square.and.arrow.down.on.square", size: 11,
+            normalColor: fileGray, hoverColor: fileHover,
+            hoverBg: fileHoverBg, pressBg: filePressedBg)
+        fileSaveAsBtn.toolTip = "Save As (Cmd+Shift+S)"
         fileSaveAsBtn.onClick = { [weak self] in self?.onFileSaveAs?() }
-        fileSaveAsBtn.translatesAutoresizingMaskIntoConstraints = false
         fileSaveAsBtn.isHidden = true
-        addSubview(fileSaveAsBtn)
 
-        // Buttons kept initialized (not added to view) so setGitActive/setSplitActive etc. don't crash
+        previewBtn = SymbolHoverButton(symbolName: "eye", size: 11,
+            normalColor: NSColor(calibratedWhite: 0.65, alpha: 1.0),
+            hoverColor:  NSColor(calibratedWhite: 1.0, alpha: 1.0),
+            hoverBg: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1.0, alpha: 0.12),
+            pressBg: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1.0, alpha: 0.25))
+        previewBtn.toolTip = "Toggle Preview"
+        previewBtn.onClick = { [weak self] in self?.onPreviewToggle?() }
+        previewBtn.isHidden = true
+
+        // Terminal buttons (shown for terminal tabs, hidden for editor tabs)
+        let termGray = NSColor(calibratedWhite: 0.5, alpha: 1.0)
+
         splitVBtn = SplitIconButton(vertical: true)
+        splitVBtn.onClick = { [weak self] in self?.onSplitVertical?() }
+
         splitHBtn = SplitIconButton(vertical: false)
+        splitHBtn.onClick = { [weak self] in self?.onSplitHorizontal?() }
+
         gitBtn = HoverButton(title: "GIT", fontSize: 9, weight: .bold,
-            normalColor: .clear, hoverColor: .clear, hoverBg: .clear, pressBg: .clear, cornerRadius: 4)
+            normalColor: termGray,
+            hoverColor: NSColor(calibratedRed: 0.95, green: 0.55, blue: 0.25, alpha: 1.0),
+            hoverBg: NSColor(calibratedRed: 0.95, green: 0.55, blue: 0.25, alpha: 0.12),
+            pressBg: NSColor(calibratedRed: 0.95, green: 0.55, blue: 0.25, alpha: 0.25),
+            cornerRadius: 4)
+        gitBtn.onClick = { [weak self] in self?.onGitToggle?() }
+
         webPickerBtn = HoverButton(title: "</>", fontSize: 9, weight: .bold,
-            normalColor: .clear, hoverColor: .clear, hoverBg: .clear, pressBg: .clear, cornerRadius: 4)
+            normalColor: termGray,
+            hoverColor: NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.55, alpha: 1.0),
+            hoverBg: NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.55, alpha: 0.12),
+            pressBg: NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.55, alpha: 0.25),
+            cornerRadius: 4)
+        webPickerBtn.onClick = { [weak self] in self?.onWebPickerToggle?() }
+
         sshBtn = HoverButton(title: "SSH", fontSize: 9, weight: .bold,
-            normalColor: .clear, hoverColor: .clear, hoverBg: .clear, pressBg: .clear, cornerRadius: 4)
+            normalColor: termGray,
+            hoverColor: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1.0, alpha: 1.0),
+            hoverBg: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1.0, alpha: 0.12),
+            pressBg: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1.0, alpha: 0.25),
+            cornerRadius: 4)
+        sshBtn.onClick = { [weak self] in self?.onSSHToggle?() }
+
+        // Right-side stack: terminal buttons + file buttons (NSStackView collapses hidden views)
+        rightStack = NSStackView(views: [splitVBtn, splitHBtn, gitBtn, webPickerBtn, sshBtn,
+                                         fileOpenBtn, fileSaveBtn, fileSaveAsBtn, previewBtn])
+        rightStack.orientation = .horizontal
+        rightStack.spacing = 4
+        rightStack.alignment = .centerY
+        rightStack.detachesHiddenViews = true  // collapse hidden buttons (default, made explicit)
+        rightStack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(rightStack)
 
         // Separator line at bottom
         sep.wantsLayer = true
@@ -5653,21 +5835,31 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
 
         NSLayoutConstraint.activate([
             tabScrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            tabScrollView.trailingAnchor.constraint(equalTo: fileOpenBtn.leadingAnchor, constant: -4),
+            tabScrollView.trailingAnchor.constraint(equalTo: rightStack.leadingAnchor, constant: -4),
             tabScrollView.centerYAnchor.constraint(equalTo: centerYAnchor),
             tabScrollView.heightAnchor.constraint(equalToConstant: 24),
 
-            fileOpenBtn.trailingAnchor.constraint(equalTo: fileSaveBtn.leadingAnchor, constant: -4),
-            fileOpenBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            splitVBtn.widthAnchor.constraint(equalToConstant: 20),
+            splitVBtn.heightAnchor.constraint(equalToConstant: 20),
+            splitHBtn.widthAnchor.constraint(equalToConstant: 20),
+            splitHBtn.heightAnchor.constraint(equalToConstant: 20),
+            gitBtn.widthAnchor.constraint(equalToConstant: 30),
+            gitBtn.heightAnchor.constraint(equalToConstant: 20),
+            webPickerBtn.widthAnchor.constraint(equalToConstant: 30),
+            webPickerBtn.heightAnchor.constraint(equalToConstant: 20),
+            sshBtn.widthAnchor.constraint(equalToConstant: 30),
+            sshBtn.heightAnchor.constraint(equalToConstant: 20),
+            fileOpenBtn.widthAnchor.constraint(equalToConstant: 26),
             fileOpenBtn.heightAnchor.constraint(equalToConstant: 20),
-
-            fileSaveBtn.trailingAnchor.constraint(equalTo: fileSaveAsBtn.leadingAnchor, constant: -4),
-            fileSaveBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            fileSaveBtn.widthAnchor.constraint(equalToConstant: 26),
             fileSaveBtn.heightAnchor.constraint(equalToConstant: 20),
-
-            fileSaveAsBtn.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor, constant: -6),
-            fileSaveAsBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            fileSaveAsBtn.widthAnchor.constraint(equalToConstant: 26),
             fileSaveAsBtn.heightAnchor.constraint(equalToConstant: 20),
+            previewBtn.widthAnchor.constraint(equalToConstant: 26),
+            previewBtn.heightAnchor.constraint(equalToConstant: 20),
+
+            rightStack.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor, constant: -6),
+            rightStack.centerYAnchor.constraint(equalTo: centerYAnchor),
 
             addBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             addBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -5842,9 +6034,27 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
     }
 
     func setFileButtonsVisible(_ visible: Bool) {
+        // Terminal buttons: show for terminal tabs, hide for editor tabs
+        splitVBtn.isHidden = visible
+        splitHBtn.isHidden = visible
+        gitBtn.isHidden = visible
+        webPickerBtn.isHidden = visible
+        sshBtn.isHidden = visible
+        // Editor file buttons: show for editor tabs, hide for terminal tabs
         fileOpenBtn.isHidden = !visible
         fileSaveBtn.isHidden = !visible
         fileSaveAsBtn.isHidden = !visible
+        // Preview button: always hidden here — shown via setPreviewButtonVisible
+        if !visible { previewBtn.isHidden = true }
+    }
+
+    func setPreviewButtonVisible(_ visible: Bool) {
+        previewBtn.isHidden = !visible
+    }
+
+    func setPreviewActive(_ active: Bool) {
+        previewBtn.setActive(active)
+        previewBtn.toolTip = active ? "Close Preview" : "Toggle Preview"
     }
 
     // MARK: Inline Tab Rename
@@ -6018,12 +6228,7 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
     @objc private func _addEditor()   { onAddEditorTab?() }
 
     func refreshLanguage() {
-        fileOpenBtn?.label.stringValue   = Loc.editorOpen
-        fileSaveBtn?.label.stringValue   = Loc.editorSave
-        fileSaveAsBtn?.label.stringValue = Loc.editorSaveAs
-        fileOpenBtn?.invalidateIntrinsicContentSize()
-        fileSaveBtn?.invalidateIntrinsicContentSize()
-        fileSaveAsBtn?.invalidateIntrinsicContentSize()
+        // File buttons use SF Symbol icons — no text to update
     }
 }
 
@@ -13663,6 +13868,208 @@ class HelpViewer {
     }
 }
 
+// MARK: - Unsaved Changes Alert
+
+/// Custom modal overlay replacing NSAlert for unsaved-editor confirmations.
+/// Renders in the same dark style as CommandPalette so it fits the app aesthetic.
+class UnsavedAlertView: NSView {
+
+    private var onSave:    (() -> Void)?
+    private var onDiscard: (() -> Void)?
+    private var onCancel:  (() -> Void)?
+
+    static let panelW: CGFloat = 310
+    static let panelH: CGFloat = 152
+
+    // ── Dim overlay ───────────────────────────────────────────────────────
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor(calibratedWhite: 0.0, alpha: 0.50).cgColor
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    // Block all clicks from passing through the dim to views below
+    override func mouseDown(with event: NSEvent) {}
+
+    // ── Factory ────────────────────────────────────────────────────────────
+    static func show(in contentView: NSView,
+                     title: String, message: String,
+                     saveLabel: String, discardLabel: String, cancelLabel: String,
+                     onSave: @escaping () -> Void,
+                     onDiscard: @escaping () -> Void,
+                     onCancel: @escaping () -> Void) {
+
+        let overlay = UnsavedAlertView(frame: contentView.bounds)
+        overlay.onSave    = onSave
+        overlay.onDiscard = onDiscard
+        overlay.onCancel  = onCancel
+        overlay.autoresizingMask = [.width, .height]
+
+        // ── Panel ──────────────────────────────────────────────────────────
+        let px = round((contentView.bounds.width  - panelW) / 2)
+        let py = round((contentView.bounds.height - panelH) / 2)
+        let panel = NSView(frame: NSRect(x: px, y: py, width: panelW, height: panelH))
+        panel.wantsLayer = true
+        panel.layer?.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 0.98).cgColor
+        panel.layer?.cornerRadius    = 10
+        panel.layer?.borderWidth     = 1
+        panel.layer?.borderColor     = NSColor(calibratedWhite: 0.30, alpha: 1.0).cgColor
+        panel.layer?.shadowOpacity   = 0.7
+        panel.layer?.shadowRadius    = 22
+        panel.layer?.shadowOffset    = CGSize(width: 0, height: -8)
+        panel.layer?.shadowColor     = NSColor.black.cgColor
+        panel.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
+        overlay.addSubview(panel)
+
+        let pad: CGFloat = 16
+
+        // ── Warning icon ───────────────────────────────────────────────────
+        let iconSize: CGFloat = 20
+        let iconCfg = NSImage.SymbolConfiguration(pointSize: iconSize * 0.7, weight: .medium)
+        if let warnIcon = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)?
+                .withSymbolConfiguration(iconCfg) {
+            let iconView = NSImageView(image: warnIcon)
+            iconView.contentTintColor = NSColor(calibratedRed: 0.95, green: 0.75, blue: 0.20, alpha: 1)
+            iconView.frame = NSRect(x: (panelW - iconSize) / 2,
+                                    y: panelH - pad - iconSize,
+                                    width: iconSize, height: iconSize)
+            panel.addSubview(iconView)
+        }
+
+        // ── Title ──────────────────────────────────────────────────────────
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font      = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.textColor = NSColor(calibratedWhite: 0.96, alpha: 1)
+        titleLabel.alignment = .center
+        titleLabel.frame     = NSRect(x: pad, y: panelH - 74, width: panelW - pad*2, height: 17)
+        panel.addSubview(titleLabel)
+
+        // ── Message ────────────────────────────────────────────────────────
+        let msgLabel = NSTextField(wrappingLabelWithString: message)
+        msgLabel.font      = NSFont.systemFont(ofSize: 11)
+        msgLabel.textColor = NSColor(calibratedWhite: 0.58, alpha: 1)
+        msgLabel.alignment = .center
+        msgLabel.frame     = NSRect(x: pad, y: panelH - 98, width: panelW - pad*2, height: 18)
+        panel.addSubview(msgLabel)
+
+        // ── Divider ────────────────────────────────────────────────────────
+        let divY: CGFloat = 46
+        let divider = NSView(frame: NSRect(x: 0, y: divY, width: panelW, height: 1))
+        divider.wantsLayer = true
+        divider.layer?.backgroundColor = NSColor(calibratedWhite: 0.20, alpha: 1).cgColor
+        panel.addSubview(divider)
+
+        // ── Buttons row ────────────────────────────────────────────────────
+        // [Cancel]   [Don't Save]   [Save ▶]  — Save has accent color
+        let btnH:   CGFloat = 28
+        let btnGap: CGFloat = 8
+        let btnY:   CGFloat = (divY - btnH) / 2
+        let totalW  = panelW - pad * 2
+        let btnW    = (totalW - btnGap * 2) / 3
+
+        func addBtn(_ label: String, accent: Bool, x: CGFloat, action: @escaping () -> Void) {
+            let btn = AlertButton(
+                frame: NSRect(x: x, y: btnY, width: btnW, height: btnH),
+                label: label, accent: accent
+            )
+            btn.onClick = action
+            panel.addSubview(btn)
+        }
+
+        addBtn(cancelLabel,  accent: false, x: pad)                      { [weak overlay] in overlay?.dismiss(calling: overlay?.onCancel) }
+        addBtn(discardLabel, accent: false, x: pad + btnW + btnGap)      { [weak overlay] in overlay?.dismiss(calling: overlay?.onDiscard) }
+        addBtn(saveLabel,    accent: true,  x: pad + (btnW + btnGap) * 2) { [weak overlay] in overlay?.dismiss(calling: overlay?.onSave) }
+
+        // ── Animate in ────────────────────────────────────────────────────
+        contentView.addSubview(overlay)
+        overlay.layer?.zPosition = 9999
+        overlay.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.13
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            overlay.animator().alphaValue = 1
+        }
+    }
+
+    // ── Dismiss ────────────────────────────────────────────────────────────
+    fileprivate func dismiss(calling action: (() -> Void)?) {
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.10
+            self.animator().alphaValue = 0
+        }, completionHandler: {
+            self.removeFromSuperview()
+            action?()
+        })
+    }
+}
+
+/// Self-contained button: IS the background — no transparent overlay needed.
+/// Handles hover color, pointing-hand cursor, and click all in one view.
+private class AlertButton: NSView {
+    var onClick: (() -> Void)?
+
+    private let normalBg: CGColor
+    private let hoverBg:  CGColor
+    private let pressBg:  CGColor
+    private var trackingArea: NSTrackingArea?
+
+    init(frame: NSRect, label: String, accent: Bool) {
+        normalBg = accent
+            ? NSColor(calibratedRed: 0.18, green: 0.42, blue: 0.88, alpha: 1.0).cgColor
+            : NSColor(calibratedWhite: 0.16, alpha: 1.0).cgColor
+        hoverBg = accent
+            ? NSColor(calibratedRed: 0.26, green: 0.52, blue: 0.96, alpha: 1.0).cgColor
+            : NSColor(calibratedWhite: 0.24, alpha: 1.0).cgColor
+        pressBg = accent
+            ? NSColor(calibratedRed: 0.14, green: 0.35, blue: 0.78, alpha: 1.0).cgColor
+            : NSColor(calibratedWhite: 0.12, alpha: 1.0).cgColor
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        layer?.backgroundColor = normalBg
+
+        let lbl = NSTextField(labelWithString: label)
+        lbl.font      = NSFont.systemFont(ofSize: 11, weight: accent ? .semibold : .regular)
+        lbl.textColor = NSColor(calibratedWhite: accent ? 1.0 : 0.80, alpha: 1)
+        lbl.alignment = .center
+        lbl.isSelectable = false
+        lbl.frame     = NSRect(x: 0, y: (frame.height - 14) / 2, width: frame.width, height: 14)
+        addSubview(lbl)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let t = trackingArea { removeTrackingArea(t) }
+        trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .cursorUpdate, .activeAlways],
+            owner: self, userInfo: nil
+        )
+        addTrackingArea(trackingArea!)
+    }
+
+    // Always show pointing-hand cursor over the button
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
+
+    override func mouseEntered(with event: NSEvent) {
+        layer?.backgroundColor = hoverBg
+    }
+    override func mouseExited(with event: NSEvent) {
+        layer?.backgroundColor = normalBg
+    }
+    override func mouseDown(with event: NSEvent) {
+        layer?.backgroundColor = pressBg
+    }
+    override func mouseUp(with event: NSEvent) {
+        layer?.backgroundColor = hoverBg   // stays hover until mouse moves
+        if bounds.contains(convert(event.locationInWindow, from: nil)) {
+            onClick?()
+        }
+    }
+}
+
 // MARK: - Command Palette
 
 struct PaletteCommand {
@@ -14540,19 +14947,54 @@ private class EditorTextView: NSTextView {
         }
         super.cursorUpdate(with: event)
     }
+    // Intercept file-URL drops — route to AppDelegate instead of letting
+    // NSTextView try to insert binary content directly into the text buffer.
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if sender.draggingPasteboard.canReadObject(
+            forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) {
+            return .copy
+        }
+        return super.draggingEntered(sender)
+    }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if let urls = sender.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           let url = urls.first {
+            (NSApp.delegate as? AppDelegate)?.openFileInEditor(url)
+            return true
+        }
+        return super.performDragOperation(sender)
+    }
 }
 
 // MARK: - Syntax Highlighting
 
 enum SyntaxLanguage: String {
-    case none, json, html, css, javascript
+    case none, json, html, css, javascript, xml, markdown,
+         shell, python, yaml, toml, swift, sql, ini, dockerfile
 
     static func detect(from url: URL) -> SyntaxLanguage {
+        // Filename-based detection (no extension)
+        switch url.lastPathComponent.lowercased() {
+        case "dockerfile", "containerfile": return .dockerfile
+        default: break
+        }
         switch url.pathExtension.lowercased() {
         case "json":                                    return .json
         case "html", "htm":                             return .html
         case "css":                                     return .css
         case "js", "mjs", "cjs", "ts", "tsx", "jsx":   return .javascript
+        case "xml", "svg", "plist", "xhtml":            return .xml
+        case "md", "markdown", "mdown", "mkd":          return .markdown
+        case "sh", "bash", "zsh", "fish", "ksh":        return .shell
+        case "py", "pyw":                               return .python
+        case "yml", "yaml":                             return .yaml
+        case "toml":                                    return .toml
+        case "swift":                                   return .swift
+        case "sql":                                     return .sql
+        case "ini", "cfg", "conf", "properties",
+             "editorconfig", "gitconfig":               return .ini
         default:                                        return .none
         }
     }
@@ -14658,6 +15100,180 @@ private extension SyntaxLanguage {
                 SyntaxRule(#"\b(const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|new|this|class|extends|import|export|default|from|async|await|typeof|instanceof|null|undefined|true|false|void|throw|try|catch|finally|delete|in|of)\b"#, keyword),
                 SyntaxRule(#"\b[\w$]+(?=\s*\()"#,            fnCall),
             ]
+
+        case .xml:
+            let comment  = isDark ? c(0x6A9955) : c(0x008000)
+            let tag      = isDark ? c(0x4EC9B0) : c(0x800000)
+            let attrN    = isDark ? c(0x9CDCFE) : c(0xE50000)
+            let attrV    = isDark ? c(0xCE9178) : c(0xA31515)
+            let cdata    = isDark ? c(0xD4D4D4) : c(0x333333)
+            let procInst = isDark ? c(0xC586C0) : c(0xAF00DB)
+            let doctype  = isDark ? c(0x569CD6) : c(0x0000FF)
+            return [
+                SyntaxRule(#"<!--[\s\S]*?-->"#,              comment),
+                SyntaxRule(#"<!\[CDATA\[[\s\S]*?\]\]>"#,     cdata),
+                SyntaxRule(#"<\?[\s\S]*?\?>"#,               procInst),
+                SyntaxRule(#"<!DOCTYPE[^>]*>"#,              doctype, options: [.caseInsensitive]),
+                SyntaxRule(#"</?[\w:.-]+"#,                  tag),
+                SyntaxRule(#"[\w:.-]+(?=\s*=)"#,             attrN),
+                SyntaxRule(#""[^"]*"|'[^']*'"#,              attrV),
+            ]
+
+        case .markdown:
+            let heading  = isDark ? c(0x569CD6) : c(0x0000FF)
+            let bold     = isDark ? c(0xDCDCAA) : c(0x795E26)
+            let italic   = isDark ? c(0xCE9178) : c(0xA31515)
+            let code     = isDark ? c(0xB5CEA8) : c(0x098658)
+            let link     = isDark ? c(0x4EC9B0) : c(0x007070)
+            let quote    = isDark ? c(0x6A9955) : c(0x008000)
+            let hr       = isDark ? c(0x808080) : c(0x888888)
+            return [
+                SyntaxRule(#"^```[\s\S]*?^```"#,             code,    options: [.anchorsMatchLines]),
+                SyntaxRule(#"`[^`\n]+`"#,                    code,    options: []),
+                SyntaxRule(#"^#{1,6}\s+[^\n]*"#,             heading, options: [.anchorsMatchLines]),
+                SyntaxRule(#"\*\*[^*\n]+\*\*|__[^_\n]+__"#, bold,    options: []),
+                SyntaxRule(#"\*[^*\n]+\*|_[^_\n]+_"#,       italic,  options: []),
+                SyntaxRule(#"!?\[[^\]]*\](\([^)]*\))?"#,     link,    options: []),
+                SyntaxRule(#"^>\s[^\n]*"#,                   quote,   options: [.anchorsMatchLines]),
+                SyntaxRule(#"^(\s*[-*+]|\s*\d+\.)\s"#,       bold,    options: [.anchorsMatchLines]),
+                SyntaxRule(#"^(---+|\*\*\*+|___+)\s*$"#,     hr,      options: [.anchorsMatchLines]),
+            ]
+
+        case .shell:
+            let comment  = isDark ? c(0x6A9955) : c(0x008000)
+            let string   = isDark ? c(0xCE9178) : c(0xA31515)
+            let keyword  = isDark ? c(0x569CD6) : c(0x0000FF)
+            let builtin  = isDark ? c(0xDCDCAA) : c(0x795E26)
+            let variable = isDark ? c(0x9CDCFE) : c(0x001080)
+            let number   = isDark ? c(0xB5CEA8) : c(0x098658)
+            return [
+                SyntaxRule(#"#[^\n]*"#,                      comment, options: []),
+                SyntaxRule(#""(?:[^"\\]|\\.)*""#,            string,  options: []),
+                SyntaxRule(#"'[^']*'"#,                      string,  options: []),
+                SyntaxRule(#"\$\{?[\w@#?*!-]+\}?"#,          variable, options: []),
+                SyntaxRule(#"\b\d+\b"#,                      number,  options: []),
+                SyntaxRule(#"\b(if|then|else|elif|fi|for|while|do|done|case|esac|in|function|return|export|local|declare|readonly|source|unset|shift|break|continue|exit)\b"#, keyword, options: []),
+                SyntaxRule(#"\b(echo|printf|read|test|exec|eval|cd|ls|grep|sed|awk|cat|rm|mv|cp|mkdir|chmod|chown|find|sort|uniq|cut|tr|head|tail|wc|curl|wget|git|sudo|apt|brew|pip|npm|make)\b"#, builtin, options: []),
+            ]
+
+        case .python:
+            let comment  = isDark ? c(0x6A9955) : c(0x008000)
+            let string   = isDark ? c(0xCE9178) : c(0xA31515)
+            let number   = isDark ? c(0xB5CEA8) : c(0x098658)
+            let keyword  = isDark ? c(0x569CD6) : c(0x0000FF)
+            let builtin  = isDark ? c(0xDCDCAA) : c(0x795E26)
+            let decorator = isDark ? c(0xC586C0) : c(0xAF00DB)
+            return [
+                SyntaxRule(#"#[^\n]*"#,                      comment,   options: []),
+                SyntaxRule(#"\"\"\"[\s\S]*?\"\"\"|'''[\s\S]*?'''"#, string),
+                SyntaxRule(#""(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'"#, string, options: []),
+                SyntaxRule(#"\b\d+\.?\d*([eE][+-]?\d+)?\b"#, number,    options: []),
+                SyntaxRule(#"@[\w.]+"#,                      decorator, options: []),
+                SyntaxRule(#"\b(False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\b"#, keyword, options: []),
+                SyntaxRule(#"\b(print|len|range|type|int|str|float|list|dict|set|tuple|bool|open|super|self|cls|abs|all|any|bin|chr|dir|enumerate|filter|format|getattr|hasattr|hex|input|isinstance|issubclass|iter|map|max|min|next|oct|ord|repr|reversed|round|setattr|slice|sorted|sum|vars|zip)\b"#, builtin, options: []),
+            ]
+
+        case .yaml:
+            let comment  = isDark ? c(0x6A9955) : c(0x008000)
+            let key      = isDark ? c(0x9CDCFE) : c(0x001080)
+            let string   = isDark ? c(0xCE9178) : c(0xA31515)
+            let number   = isDark ? c(0xB5CEA8) : c(0x098658)
+            let keyword  = isDark ? c(0x569CD6) : c(0x0000FF)
+            let anchor   = isDark ? c(0xC586C0) : c(0xAF00DB)
+            let tag      = isDark ? c(0x4EC9B0) : c(0x007070)
+            return [
+                SyntaxRule(#"#[^\n]*"#,                      comment, options: []),
+                SyntaxRule(#"^---$|^\.\.\.$"#,               tag,     options: [.anchorsMatchLines]),
+                SyntaxRule(#"[&*][\w]+"#,                    anchor,  options: []),
+                SyntaxRule(#"![\w!/]+"#,                     tag,     options: []),
+                SyntaxRule(#"\"[^"]*\"|'[^']*'"#,            string,  options: []),
+                SyntaxRule(#"\b(true|false|null|yes|no|on|off|~)\b"#, keyword, options: []),
+                SyntaxRule(#"\b-?\d+\.?\d*([eE][+-]?\d+)?\b"#, number, options: []),
+                SyntaxRule(#"^[\s-]*[\w\s.-]+(?=\s*:)"#,     key,     options: [.anchorsMatchLines]),
+            ]
+
+        case .toml:
+            let comment  = isDark ? c(0x6A9955) : c(0x008000)
+            let section  = isDark ? c(0xDCDCAA) : c(0x795E26)
+            let key      = isDark ? c(0x9CDCFE) : c(0x001080)
+            let string   = isDark ? c(0xCE9178) : c(0xA31515)
+            let number   = isDark ? c(0xB5CEA8) : c(0x098658)
+            let keyword  = isDark ? c(0x569CD6) : c(0x0000FF)
+            return [
+                SyntaxRule(#"#[^\n]*"#,                      comment, options: []),
+                SyntaxRule(#"^\s*\[+[^\]]+\]+"#,             section, options: [.anchorsMatchLines]),
+                SyntaxRule(#"\"\"\"[\s\S]*?\"\"\"|'''[\s\S]*?'''"#, string),
+                SyntaxRule(#"\"(?:[^"\\]|\\.)*\"|'[^']*'"#,  string,  options: []),
+                SyntaxRule(#"\b(true|false)\b"#,             keyword, options: []),
+                SyntaxRule(#"\b-?\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}"#, number, options: []),
+                SyntaxRule(#"\b-?\d+\.?\d*([eE][+-]?\d+)?\b"#, number, options: []),
+                SyntaxRule(#"^[\w.-]+(?=\s*=)"#,             key,     options: [.anchorsMatchLines]),
+            ]
+
+        case .swift:
+            let swiftComment = isDark ? c(0x6A9955) : c(0x008000)
+            let swiftString  = isDark ? c(0xCE9178) : c(0xA31515)
+            let swiftNumber  = isDark ? c(0xB5CEA8) : c(0x098658)
+            let swiftKeyword = isDark ? c(0x569CD6) : c(0x0000FF)
+            let swiftType    = isDark ? c(0x4EC9B0) : c(0x267F99)
+            let swiftFn      = isDark ? c(0xDCDCAA) : c(0x795E26)
+            let swiftAttr    = isDark ? c(0xC586C0) : c(0xAF00DB)
+            return [
+                SyntaxRule(#"\/\*[\s\S]*?\*\/"#,             swiftComment),
+                SyntaxRule(#"\/\/[^\n]*"#,                   swiftComment, options: []),
+                SyntaxRule(##"#"[^"]*"#"##,                   swiftString,  options: []),
+                SyntaxRule(#"\"(?:[^"\\]|\\.)*\""#,          swiftString,  options: []),
+                SyntaxRule(#"\b\d+\.?\d*\b"#,                swiftNumber,  options: []),
+                SyntaxRule(#"@\w+"#,                         swiftAttr,    options: []),
+                SyntaxRule(#"\b[A-Z][A-Za-z0-9]*\b"#,        swiftType,    options: []),
+                SyntaxRule(#"\b(actor|any|as|associatedtype|async|await|break|case|catch|class|continue|defer|default|deinit|do|else|enum|extension|fallthrough|false|fileprivate|final|for|func|get|guard|if|import|in|indirect|infix|init|inout|internal|is|lazy|let|mutating|nil|nonisolated|nonmutating|open|operator|optional|override|postfix|prefix|private|protocol|public|repeat|required|rethrows|return|self|Self|set|some|static|struct|subscript|super|switch|throw|throws|true|try|typealias|unowned|var|weak|where|while|willSet|didSet)\b"#, swiftKeyword, options: []),
+                SyntaxRule(#"\b[a-z_]\w*(?=\s*\()"#,         swiftFn,      options: []),
+            ]
+
+        case .sql:
+            let sqlComment = isDark ? c(0x6A9955) : c(0x008000)
+            let sqlString  = isDark ? c(0xCE9178) : c(0xA31515)
+            let sqlNumber  = isDark ? c(0xB5CEA8) : c(0x098658)
+            let sqlKeyword = isDark ? c(0x569CD6) : c(0x0000FF)
+            let sqlFn      = isDark ? c(0xDCDCAA) : c(0x795E26)
+            let sqlType    = isDark ? c(0x4EC9B0) : c(0x267F99)
+            return [
+                SyntaxRule(#"--[^\n]*"#,                     sqlComment, options: []),
+                SyntaxRule(#"\/\*[\s\S]*?\*\/"#,             sqlComment),
+                SyntaxRule(#"'(?:[^'\\]|\\.)*'"#,            sqlString,  options: []),
+                SyntaxRule(#"\b\d+\.?\d*\b"#,                sqlNumber,  options: []),
+                SyntaxRule(#"\b(INT|INTEGER|BIGINT|SMALLINT|TINYINT|FLOAT|DOUBLE|DECIMAL|NUMERIC|REAL|CHAR|VARCHAR|TEXT|BLOB|BOOLEAN|BOOL|DATE|DATETIME|TIMESTAMP|TIME|YEAR|BINARY|VARBINARY|JSON|UUID|SERIAL)\b"#, sqlType, options: [.caseInsensitive]),
+                SyntaxRule(#"\b(SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|DROP|ALTER|TABLE|DATABASE|INDEX|VIEW|TRIGGER|PROCEDURE|FUNCTION|PRIMARY|FOREIGN|KEY|REFERENCES|UNIQUE|NOT|NULL|DEFAULT|AUTO_INCREMENT|ON|OFF|JOIN|INNER|LEFT|RIGHT|OUTER|FULL|CROSS|UNION|ALL|DISTINCT|AS|IN|EXISTS|BETWEEN|LIKE|ILIKE|IS|AND|OR|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|ASC|DESC|BEGIN|COMMIT|ROLLBACK|TRANSACTION|CONSTRAINT|CHECK|CASCADE|RESTRICT|IF|THEN|ELSE|END|CASE|WHEN|WITH|RECURSIVE)\b"#, sqlKeyword, options: [.caseInsensitive]),
+                SyntaxRule(#"\b(COUNT|SUM|AVG|MIN|MAX|COALESCE|NULLIF|IFNULL|NOW|CURDATE|DATE_FORMAT|SUBSTRING|LENGTH|UPPER|LOWER|TRIM|CONCAT|REPLACE|ROUND|FLOOR|CEIL|ABS|MOD|CAST|CONVERT)\b"#, sqlFn, options: [.caseInsensitive]),
+            ]
+
+        case .ini:
+            let comment  = isDark ? c(0x6A9955) : c(0x008000)
+            let section  = isDark ? c(0xDCDCAA) : c(0x795E26)
+            let key      = isDark ? c(0x9CDCFE) : c(0x001080)
+            let value    = isDark ? c(0xCE9178) : c(0xA31515)
+            let number   = isDark ? c(0xB5CEA8) : c(0x098658)
+            return [
+                SyntaxRule(#"[#;][^\n]*"#,                   comment, options: []),
+                SyntaxRule(#"^\s*\[[^\]]+\]"#,               section, options: [.anchorsMatchLines]),
+                SyntaxRule(#"^\s*[\w.-]+(?=\s*[=:])"#,        key,     options: [.anchorsMatchLines]),
+                SyntaxRule(#"(?<=[=:])\s*[^\n#;]+"#,         value,   options: []),
+                SyntaxRule(#"\b\d+\.?\d*\b"#,                number,  options: []),
+            ]
+
+        case .dockerfile:
+            let comment   = isDark ? c(0x6A9955) : c(0x008000)
+            let instruc   = isDark ? c(0x569CD6) : c(0x0000FF)
+            let string    = isDark ? c(0xCE9178) : c(0xA31515)
+            let variable  = isDark ? c(0x9CDCFE) : c(0x001080)
+            let flag      = isDark ? c(0xDCDCAA) : c(0x795E26)
+            return [
+                SyntaxRule(#"#[^\n]*"#,                      comment,  options: []),
+                SyntaxRule(#""(?:[^"\\]|\\.)*""#,            string,   options: []),
+                SyntaxRule(#"\$\{?[\w]+\}?"#,                variable, options: []),
+                SyntaxRule(#"--[\w-]+"#,                     flag,     options: []),
+                SyntaxRule(#"^(FROM|RUN|CMD|LABEL|EXPOSE|ENV|ADD|COPY|ENTRYPOINT|VOLUME|USER|WORKDIR|ARG|ONBUILD|STOPSIGNAL|HEALTHCHECK|SHELL|MAINTAINER)\b"#, instruc, options: [.anchorsMatchLines, .caseInsensitive]),
+            ]
         }
     }
 }
@@ -14668,6 +15284,8 @@ final class SyntaxTextStorage: NSTextStorage {
     var isDark: Bool = true          { didSet { if oldValue != isDark  { highlight() } } }
     var baseFont: NSFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
     var baseFG:   NSColor = .white
+    /// Called when the user actually edits characters (not just re-highlighting attributes)
+    var onTextEdited: (() -> Void)?
 
     private var highlightTimer: Timer?
 
@@ -14697,6 +15315,10 @@ final class SyntaxTextStorage: NSTextStorage {
     // ── Highlighting ─────────────────────────────────────────────────────────
 
     override func processEditing() {
+        // Notify dirty only for real character edits, not attribute-only changes from highlighting
+        if editedMask.contains(.editedCharacters) {
+            onTextEdited?()
+        }
         super.processEditing()
         guard language != .none else { return }
         highlightTimer?.invalidate()
@@ -14729,7 +15351,500 @@ final class SyntaxTextStorage: NSTextStorage {
     }
 }
 
+// MARK: - Editor Alert Overlay
+
+/// Chunk-based async file reader with cancellation support.
+private final class FileLoadTask {
+    private var cancelled = false
+    func cancel() { cancelled = true }
+
+    func load(url: URL, totalSize: Int,
+              progress: @escaping (Double) -> Void,
+              completion: @escaping (String?) -> Void) {
+        guard let handle = FileHandle(forReadingAtPath: url.path) else {
+            completion(nil); return
+        }
+        let total = max(1, totalSize)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var data = Data()
+            data.reserveCapacity(min(total, 64 * 1024 * 1024))
+            let chunkSize = 65_536
+            var read = 0
+            while !(self?.cancelled ?? true) {
+                let chunk = handle.readData(ofLength: chunkSize)
+                guard !chunk.isEmpty else { break }
+                data.append(chunk)
+                read += chunk.count
+                let frac = min(1.0, Double(read) / Double(total))
+                DispatchQueue.main.async { progress(frac) }
+            }
+            handle.closeFile()
+            guard !(self?.cancelled ?? true) else {
+                DispatchQueue.main.async { completion(nil) }; return
+            }
+            let str = String(data: data, encoding: .utf8)
+                   ?? String(data: data, encoding: .isoLatin1)
+                   ?? ""
+            DispatchQueue.main.async { completion(str) }
+        }
+    }
+}
+
+/// Full-window dark overlay — warning mode (binary) or loading mode (progress).
+class EditorAlertOverlay: NSView {
+    private let panel = NSView()
+    private var progressBar: NSProgressIndicator?
+    private var pctLabel: NSTextField?
+
+    override var isFlipped: Bool { true }
+    // Swallow all mouse events so nothing behind is clickable.
+    override func mouseDown(with event: NSEvent) {}
+    override func rightMouseDown(with event: NSEvent) {}
+    override func scrollWheel(with event: NSEvent) {}
+
+    // MARK: Factories
+
+    static func warning(filename: String, reason: String,
+                        onDismiss: @escaping () -> Void) -> EditorAlertOverlay {
+        let v = EditorAlertOverlay(frame: .zero)
+        v.buildPanel(height: 170)
+        v.buildWarning(filename: filename, reason: reason, onDismiss: onDismiss)
+        return v
+    }
+
+    static func loading(filename: String, fileSize: Int,
+                        onCancel: @escaping () -> Void) -> EditorAlertOverlay {
+        let v = EditorAlertOverlay(frame: .zero)
+        v.buildPanel(height: 152)
+        v.buildLoading(filename: filename, fileSize: fileSize, onCancel: onCancel)
+        return v
+    }
+
+    // MARK: Progress update (loading mode only)
+
+    func updateProgress(_ fraction: Double) {
+        progressBar?.doubleValue = fraction * 100
+        pctLabel?.stringValue = String(format: "%.0f%%", fraction * 100)
+    }
+
+    // MARK: Dismiss
+
+    func dismissAnimated(completion: (() -> Void)? = nil) {
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.15
+            self.animator().alphaValue = 0
+        }, completionHandler: {
+            self.removeFromSuperview()
+            completion?()
+        })
+    }
+
+    // MARK: Private builders
+
+    private func buildPanel(height: CGFloat) {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
+        autoresizingMask = [.width, .height]
+
+        panel.wantsLayer = true
+        panel.layer?.backgroundColor = NSColor(calibratedRed: 0.08, green: 0.08,
+                                               blue: 0.10, alpha: 0.97).cgColor
+        panel.layer?.cornerRadius = 10
+        panel.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.09).cgColor
+        panel.layer?.borderWidth = 0.5
+        panel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(panel)
+        NSLayoutConstraint.activate([
+            panel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            panel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            panel.widthAnchor.constraint(equalToConstant: 320),
+            panel.heightAnchor.constraint(equalToConstant: height),
+        ])
+    }
+
+    private func label(_ text: String, font: NSFont, color: NSColor,
+                       lines: Int = 1) -> NSTextField {
+        let l = NSTextField(labelWithString: text)
+        l.font = font; l.textColor = color
+        l.alignment = .center
+        l.maximumNumberOfLines = lines
+        l.lineBreakMode = lines > 1 ? .byWordWrapping : .byTruncatingMiddle
+        l.translatesAutoresizingMaskIntoConstraints = false
+        return l
+    }
+
+    private func actionButton(_ title: String, action: @escaping () -> Void) -> HoverButton {
+        let btn = HoverButton(
+            title: title, fontSize: 11.5, weight: .medium,
+            normalColor: NSColor(calibratedWhite: 0.85, alpha: 1),
+            hoverColor: .white,
+            normalBg: NSColor(calibratedWhite: 1, alpha: 0.10),
+            hoverBg:  NSColor(calibratedWhite: 1, alpha: 0.18),
+            pressBg:  NSColor(calibratedWhite: 1, alpha: 0.26),
+            cornerRadius: 5)
+        btn.onClick = action
+        btn.translatesAutoresizingMaskIntoConstraints = false
+        return btn
+    }
+
+    private func buildWarning(filename: String, reason: String,
+                              onDismiss: @escaping () -> Void) {
+        let mono12 = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .semibold)
+        let mono10 = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
+        let orange  = NSColor(calibratedRed: 1.0, green: 0.78, blue: 0.0, alpha: 1)
+        let dimGray = NSColor(calibratedWhite: 0.58, alpha: 1)
+
+        let icon   = label("⚠", font: .systemFont(ofSize: 26), color: orange)
+        let title  = label("Datei kann nicht geöffnet werden", font: mono12, color: .white)
+        let msg    = label(reason, font: mono10, color: dimGray, lines: 3)
+        let okBtn  = actionButton("OK") { [weak self] in self?.dismissAnimated(completion: onDismiss) }
+
+        [icon, title, msg, okBtn].forEach { panel.addSubview($0) }
+        NSLayoutConstraint.activate([
+            icon.centerXAnchor.constraint(equalTo: panel.centerXAnchor),
+            icon.topAnchor.constraint(equalTo: panel.topAnchor, constant: 16),
+
+            title.centerXAnchor.constraint(equalTo: panel.centerXAnchor),
+            title.topAnchor.constraint(equalTo: icon.bottomAnchor, constant: 8),
+            title.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 16),
+            title.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -16),
+
+            msg.centerXAnchor.constraint(equalTo: panel.centerXAnchor),
+            msg.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 6),
+            msg.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 20),
+            msg.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -20),
+
+            okBtn.centerXAnchor.constraint(equalTo: panel.centerXAnchor),
+            okBtn.bottomAnchor.constraint(equalTo: panel.bottomAnchor, constant: -16),
+            okBtn.widthAnchor.constraint(equalToConstant: 80),
+            okBtn.heightAnchor.constraint(equalToConstant: 24),
+        ])
+    }
+
+    private func buildLoading(filename: String, fileSize: Int,
+                              onCancel: @escaping () -> Void) {
+        let mono12 = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .semibold)
+        let mono10 = NSFont.monospacedSystemFont(ofSize: 10,   weight: .regular)
+        let dimGray = NSColor(calibratedWhite: 0.55, alpha: 1)
+
+        let sizeStr = fileSize > 1_048_576
+            ? String(format: "%.1f MB", Double(fileSize) / 1_048_576)
+            : String(format: "%.0f KB", Double(fileSize) / 1024)
+
+        let nameLabel   = label(filename, font: mono12, color: .white)
+        let sizeLabel   = label("Lade Datei · \(sizeStr)", font: mono10, color: dimGray)
+
+        let bar = NSProgressIndicator()
+        bar.style = .bar; bar.isIndeterminate = false
+        bar.minValue = 0; bar.maxValue = 100; bar.doubleValue = 0
+        bar.controlSize = .small
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        progressBar = bar
+
+        let pct = label("0%", font: mono10, color: NSColor(calibratedWhite: 0.65, alpha: 1))
+        pctLabel = pct
+
+        let cancelBtn = actionButton("Abbrechen") { [weak self] in
+            self?.dismissAnimated(completion: onCancel)
+        }
+
+        [nameLabel, sizeLabel, bar, pct, cancelBtn].forEach { panel.addSubview($0) }
+        NSLayoutConstraint.activate([
+            nameLabel.centerXAnchor.constraint(equalTo: panel.centerXAnchor),
+            nameLabel.topAnchor.constraint(equalTo: panel.topAnchor, constant: 20),
+            nameLabel.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 16),
+            nameLabel.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -16),
+
+            sizeLabel.centerXAnchor.constraint(equalTo: panel.centerXAnchor),
+            sizeLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 5),
+
+            bar.topAnchor.constraint(equalTo: sizeLabel.bottomAnchor, constant: 14),
+            bar.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 20),
+            bar.trailingAnchor.constraint(equalTo: pct.leadingAnchor, constant: -8),
+
+            pct.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+            pct.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -20),
+            pct.widthAnchor.constraint(equalToConstant: 36),
+
+            cancelBtn.centerXAnchor.constraint(equalTo: panel.centerXAnchor),
+            cancelBtn.topAnchor.constraint(equalTo: bar.bottomAnchor, constant: 14),
+            cancelBtn.widthAnchor.constraint(equalToConstant: 90),
+            cancelBtn.heightAnchor.constraint(equalToConstant: 22),
+        ])
+    }
+}
+
+// MARK: - Preview Renderers
+
+private func markdownToHTML(_ md: String, isDark: Bool) -> String {
+    let bg        = isDark ? "#0d0d10" : "#ffffff"
+    let fg        = isDark ? "#dde1e7" : "#1c1c1e"
+    let codeBg    = isDark ? "#1e1e2e" : "#f3f4f6"
+    let codeColor = isDark ? "#f0c6fc" : "#9333ea"
+    let blockBg   = isDark ? "#161620" : "#f9fafb"
+    let border    = isDark ? "#2e2e3a" : "#e5e7eb"
+    let link      = isDark ? "#7eb8f5" : "#2563eb"
+    let head      = isDark ? "#ffffff" : "#111827"
+
+    func escH(_ s: String) -> String {
+        s.replacingOccurrences(of: "&", with: "&amp;")
+         .replacingOccurrences(of: "<", with: "&lt;")
+         .replacingOccurrences(of: ">", with: "&gt;")
+    }
+    func inline(_ s: String) -> String {
+        var r = escH(s)
+        r = r.replacingOccurrences(of: #"`([^`]+)`"#,          with: "<code>$1</code>",              options: .regularExpression)
+        r = r.replacingOccurrences(of: ##"~~([^~]+)~~"##,       with: "<del>$1</del>",                options: .regularExpression)
+        r = r.replacingOccurrences(of: ##"\*\*([^*]+)\*\*"##,   with: "<strong>$1</strong>",          options: .regularExpression)
+        r = r.replacingOccurrences(of: ##"\*([^*\n]+)\*"##,     with: "<em>$1</em>",                  options: .regularExpression)
+        r = r.replacingOccurrences(of: ##"\[([^\]]+)\]\(([^)]+)\)"##, with: #"<a href="$2">$1</a>"#, options: .regularExpression)
+        return r
+    }
+
+    var out = ""
+    var inCode = false
+    var inList = false
+    var inOL   = false
+    var inPara = false
+    var codeBuf: [String] = []
+
+    func closeP() { if inPara { out += "</p>\n"; inPara = false } }
+    func closeUL() { if inList { out += "</ul>\n"; inList = false } }
+    func closeOL() { if inOL   { out += "</ol>\n"; inOL   = false } }
+
+    for line in md.components(separatedBy: "\n") {
+        if line.hasPrefix("```") {
+            if inCode {
+                let escaped = codeBuf.map { escH($0) }.joined(separator: "\n")
+                out += "<pre><code>\(escaped)</code></pre>\n"
+                inCode = false; codeBuf = []
+            } else {
+                closeP(); closeUL(); closeOL()
+                inCode = true
+            }
+            continue
+        }
+        if inCode { codeBuf.append(line); continue }
+
+        let trim = line.trimmingCharacters(in: .whitespaces)
+        if trim.isEmpty {
+            closeP(); closeUL(); closeOL()
+        } else if line.hasPrefix("#### ") {
+            closeP(); closeUL(); closeOL()
+            out += "<h4>\(inline(String(line.dropFirst(5))))</h4>\n"
+        } else if line.hasPrefix("### ") {
+            closeP(); closeUL(); closeOL()
+            out += "<h3>\(inline(String(line.dropFirst(4))))</h3>\n"
+        } else if line.hasPrefix("## ") {
+            closeP(); closeUL(); closeOL()
+            out += "<h2>\(inline(String(line.dropFirst(3))))</h2>\n"
+        } else if line.hasPrefix("# ") {
+            closeP(); closeUL(); closeOL()
+            out += "<h1>\(inline(String(line.dropFirst(2))))</h1>\n"
+        } else if trim == "---" || trim == "***" || trim == "___" {
+            closeP(); closeUL(); closeOL()
+            out += "<hr/>\n"
+        } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
+            closeP(); closeOL()
+            if !inList { out += "<ul>\n"; inList = true }
+            out += "<li>\(inline(String(line.dropFirst(2))))</li>\n"
+        } else if line.range(of: ##"^\d+\. "##, options: .regularExpression) != nil {
+            closeP(); closeUL()
+            if !inOL { out += "<ol>\n"; inOL = true }
+            let content = line.replacingOccurrences(of: ##"^\d+\. "##, with: "", options: .regularExpression)
+            out += "<li>\(inline(content))</li>\n"
+        } else if line.hasPrefix("> ") {
+            closeP(); closeUL(); closeOL()
+            out += "<blockquote>\(inline(String(line.dropFirst(2))))</blockquote>\n"
+        } else {
+            closeUL(); closeOL()
+            if !inPara { out += "<p>"; inPara = true } else { out += " " }
+            out += inline(line)
+        }
+    }
+    closeP(); closeUL(); closeOL()
+    if inCode {
+        let escaped = codeBuf.map { escH($0) }.joined(separator: "\n")
+        out += "<pre><code>\(escaped)</code></pre>\n"
+    }
+
+    return """
+    <!DOCTYPE html><html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+    *{box-sizing:border-box}
+    body{background:\(bg);color:\(fg);font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;font-size:15px;line-height:1.65;padding:24px 32px;max-width:860px;margin:0 auto}
+    h1,h2,h3,h4{color:\(head);font-weight:600;margin:1.4em 0 0.5em}
+    h1{font-size:2em;border-bottom:2px solid \(border);padding-bottom:0.3em}
+    h2{font-size:1.5em;border-bottom:1px solid \(border);padding-bottom:0.2em}
+    h3{font-size:1.2em} h4{font-size:1em}
+    a{color:\(link);text-decoration:none}a:hover{text-decoration:underline}
+    code{background:\(codeBg);color:\(codeColor);padding:2px 5px;border-radius:4px;font-family:Menlo,monospace;font-size:.88em}
+    pre{background:\(codeBg);border-radius:8px;padding:16px;overflow-x:auto;margin:1em 0}
+    pre code{background:none;color:\(isDark ? "#e2e8f0" : "#374151");padding:0;font-size:.9em}
+    blockquote{background:\(blockBg);border-left:4px solid \(isDark ? "#3a3a5e" : "#6366f1");margin:0 0 1em;padding:10px 16px;border-radius:0 6px 6px 0}
+    ul,ol{padding-left:1.5em;margin:.5em 0}li{margin:.2em 0}
+    hr{border:none;border-top:1px solid \(border);margin:2em 0}
+    strong{font-weight:600}em{font-style:italic}del{opacity:.6;text-decoration:line-through}
+    p{margin:.5em 0 .8em}
+    </style></head><body>\(out)</body></html>
+    """
+}
+
+private func svgToHTML(_ svg: String, isDark: Bool) -> String {
+    let bg = isDark ? "#0d0d10" : "#f0f0f0"
+    return """
+    <!DOCTYPE html><html><head>
+    <meta charset="utf-8">
+    <style>html,body{margin:0;padding:16px;background:\(bg);display:flex;justify-content:center;align-items:flex-start;min-height:calc(100vh - 32px)}svg{max-width:100%;height:auto;border-radius:4px}</style>
+    </head><body>\(svg)</body></html>
+    """
+}
+
+private func csvToHTML(_ csv: String, isDark: Bool) -> String {
+    let bg     = isDark ? "#0d0d10" : "#ffffff"
+    let fg     = isDark ? "#dde1e7" : "#1c1c1e"
+    let hdBg   = isDark ? "#1a1a28" : "#f3f4f6"
+    let rowBg  = isDark ? "#131318" : "#ffffff"
+    let altBg  = isDark ? "#17171f" : "#f9fafb"
+    let border = isDark ? "#2a2a3a" : "#e5e7eb"
+    let hover  = isDark ? "#1e1e2e" : "#eff6ff"
+
+    func parseRow(_ r: String) -> [String] {
+        r.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
+    let rows = csv.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+    guard !rows.isEmpty else { return "<p>Empty CSV</p>" }
+
+    var tbl = "<table><thead><tr>"
+    for h in parseRow(rows[0]) { tbl += "<th>\(h)</th>" }
+    tbl += "</tr></thead><tbody>"
+    for (i, row) in rows.dropFirst().enumerated() {
+        tbl += "<tr class=\"\(i % 2 == 0 ? "e" : "o")\">"
+        for c in parseRow(row) { tbl += "<td>\(c)</td>" }
+        tbl += "</tr>"
+    }
+    tbl += "</tbody></table>"
+
+    return """
+    <!DOCTYPE html><html><head>
+    <meta charset="utf-8">
+    <style>
+    *{box-sizing:border-box}
+    body{background:\(bg);color:\(fg);font-family:-apple-system,sans-serif;font-size:13px;padding:16px;margin:0}
+    table{width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden}
+    th{background:\(hdBg);font-weight:600;padding:8px 12px;text-align:left;border-bottom:2px solid \(border)}
+    td{padding:6px 12px;border-bottom:1px solid \(border)}
+    tr.e{background:\(rowBg)}tr.o{background:\(altBg)}
+    tr:hover td{background:\(hover)}
+    </style></head><body>\(tbl)</body></html>
+    """
+}
+
 // MARK: - Text Editor
+
+class LineGutterView: NSView {
+
+    override var isFlipped: Bool { true }
+
+    var bgColor:  NSColor = NSColor(calibratedWhite: 0.06, alpha: 1.0)
+    var numColor: NSColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
+    var sepColor: NSColor = NSColor(calibratedWhite: 1.0,  alpha: 0.08)
+
+    weak var textView:  NSTextView?
+    weak var scrollView: NSScrollView?
+
+    func applyColors(isDark: Bool, bg: NSColor) {
+        if isDark {
+            bgColor  = NSColor(calibratedWhite: 0.06, alpha: 1.0)
+            numColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
+            sepColor = NSColor(calibratedWhite: 1.0,  alpha: 0.08)
+        } else {
+            bgColor  = NSColor(calibratedWhite: 0.88, alpha: 1.0)
+            numColor = NSColor(calibratedWhite: 0.45, alpha: 1.0)
+            sepColor = NSColor(calibratedWhite: 0.0,  alpha: 0.08)
+        }
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let tv = textView,
+              let lm = tv.layoutManager,
+              let tc = tv.textContainer,
+              let sv = scrollView else {
+            bgColor.setFill(); dirtyRect.fill(); return
+        }
+
+        // Background
+        bgColor.setFill()
+        bounds.fill()
+
+        // Right separator (1 px)
+        sepColor.setFill()
+        NSRect(x: bounds.width - 1, y: dirtyRect.minY, width: 1, height: dirtyRect.height).fill()
+
+        let str = tv.string as NSString
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font:            NSFont.monospacedSystemFont(ofSize: 10, weight: .regular),
+            .foregroundColor: numColor,
+        ]
+
+        if str.length == 0 {
+            // Empty doc — always show "1"
+            let label = "1" as NSString
+            let sz = label.size(withAttributes: attrs)
+            label.draw(at: NSPoint(x: bounds.width - sz.width - 8, y: 4), withAttributes: attrs)
+            return
+        }
+
+        // Visible rect in textView coordinates
+        let docVisible = sv.documentVisibleRect
+        let glyphRange = lm.glyphRange(forBoundingRect: docVisible, in: tc)
+        let charRange  = lm.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+
+        // Which line number starts at the top of the visible area?
+        var lineNum = 1
+        if charRange.location > 0 {
+            lineNum = str.substring(to: charRange.location)
+                         .components(separatedBy: "\n").count
+        }
+
+        var glyphIdx = glyphRange.location
+        let glyphEnd = NSMaxRange(glyphRange)
+
+        while glyphIdx < glyphEnd {
+            var fragRange = NSRange(location: NSNotFound, length: 0)
+            let lineRect  = lm.lineFragmentRect(forGlyphAt: glyphIdx, effectiveRange: &fragRange)
+            guard fragRange.location != NSNotFound, fragRange.length > 0 else { break }
+
+            // Only first fragment of each paragraph gets a number
+            let isFirst: Bool = {
+                guard glyphIdx > glyphRange.location else { return true }
+                let charIdx = lm.characterIndexForGlyph(at: glyphIdx)
+                return charIdx == 0 || str.character(at: charIdx - 1) == 10  // '\n'
+            }()
+
+            if isFirst {
+                // Convert textView coordinate → gutter coordinate
+                let origin = convert(lineRect.origin, from: tv)
+                let label  = "\(lineNum)" as NSString
+                let sz     = label.size(withAttributes: attrs)
+                let x      = bounds.width - sz.width - 8   // right-aligned, 8 px padding
+                let y      = origin.y + (lineRect.height - sz.height) / 2
+                label.draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
+                lineNum += 1
+            }
+
+            let next = NSMaxRange(fragRange)
+            if next <= glyphIdx { break }
+            glyphIdx = next
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 
 class EditorView: NSView {
 
@@ -14740,7 +15855,14 @@ class EditorView: NSView {
     private var modeBar: NSView!
     private var modeBarLabel: NSTextField!
     private var syntaxStorage: SyntaxTextStorage?
+    private var wkView: WKWebView?
+    var isPreviewActive: Bool { !(wkView?.isHidden ?? true) }
     var vimMode: VimSubMode = .normal
+    /// Called whenever the user types (character-level edit)
+    var onTextEdited: (() -> Void)? {
+        get { syntaxStorage?.onTextEdited }
+        set { syntaxStorage?.onTextEdited = newValue }
+    }
     var vimYankBuffer: String = ""
     var vimPendingColon: Bool = false
 
@@ -14842,6 +15964,25 @@ class EditorView: NSView {
     func setHighlightDark(_ dark: Bool) {
         syntaxStorage?.isDark = dark
         // isDark didSet triggers highlight() automatically
+    }
+
+    func showPreview(html: String, baseURL: URL?) {
+        if wkView == nil {
+            let wk = WKWebView(frame: bounds)
+            wk.wantsLayer = true
+            wk.autoresizingMask = [.width, .height]
+            // Insert below modeBar so mode bar stays on top
+            addSubview(wk, positioned: .below, relativeTo: modeBar)
+            wkView = wk
+        }
+        wkView?.loadHTMLString(html, baseURL: baseURL)
+        wkView?.isHidden = false
+        scrollView.isHidden = true
+    }
+
+    func hidePreview() {
+        wkView?.isHidden = true
+        scrollView.isHidden = false
     }
 
     func setInputMode(_ mode: EditorInputMode) {
@@ -15069,6 +16210,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var tabEditorModes: [EditorInputMode] = []
     var tabEditorURLs:  [URL?] = []
     var tabEditorDirty: [Bool] = []
+    var tabPreviewActive: [Bool] = []
     var splitContainers: [SplitContainer] = []
     var activeTab = 0
     var statusItem: NSStatusItem!
@@ -15282,11 +16424,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
-        // Window — positioned under tray icon, restore saved size
+        // Window — positioned under tray icon, restore saved size (clamped to screen).
+        // maxH leaves an 80px buffer so the window always fits under the tray icon
+        // (positionWindowUnderTrayIcon needs fallbackY > 0, i.e. height < visibleFrame.maxY - 4).
         let savedW = UserDefaults.standard.double(forKey: "windowWidth")
         let savedH = UserDefaults.standard.double(forKey: "windowHeight")
-        let w: CGFloat = savedW > 100 ? CGFloat(savedW) : 860
-        let h: CGFloat = savedH > 100 ? CGFloat(savedH) : 480
+        let screenVis = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 780)
+        let maxW = screenVis.width
+        let maxH = max(220, screenVis.height - 80)   // 80px buffer for tray bar + arrow gap
+        let w: CGFloat = savedW > 100 ? min(CGFloat(savedW), maxW) : 860
+        let h: CGFloat = savedH > 100 ? min(CGFloat(savedH), maxH) : 480
+        // Persist the clamped values so a bad saved size doesn't re-emerge on next launch
+        if savedW > maxW || savedH > maxH {
+            UserDefaults.standard.set(Double(w), forKey: "windowWidth")
+            UserDefaults.standard.set(Double(h), forKey: "windowHeight")
+        }
         let frame = NSRect(x: 0, y: 0, width: w, height: h)
 
         window = BorderlessWindow(contentRect: frame,
@@ -15364,6 +16516,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         headerView.onFileOpen   = { [weak self] in self?.openEditorFile() }
         headerView.onFileSave   = { [weak self] in self?.saveCurrentEditor() }
         headerView.onFileSaveAs = { [weak self] in self?.saveCurrentEditorAs() }
+        headerView.onPreviewToggle = { [weak self] in self?.togglePreview() }
         headerView.onFileDropped = { [weak self] url in
             self?.createEditorTabInternal(url: url)
         }
@@ -15519,15 +16672,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // SOLUTION:
         //   Detached window — uses saved X/Y from UserDefaults, no tray dependency →
         //     show on the next run-loop (main.async).
-        //   Docked window   — wait 200 ms so all status-bar items are placed and the
-        //     tray-icon coordinate is final.  showWindowAnimated() then positions once
-        //     with real coords and fades in cleanly.  No retry needed.
+        //   Docked window   — wait 400 ms so all status-bar items are placed and the
+        //     tray-icon X coordinate is final (macOS pushes items leftward as others
+        //     appear; 200 ms was sometimes too short on slower machines).
         DispatchQueue.main.async { [weak self] in
             guard let self = self,
                   UserDefaults.standard.bool(forKey: "windowDetached") else { return }
             self.restoreDetachedWindowState()
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.40) { [weak self] in
             guard let self = self, !self.isWindowDetached else { return }
             self.showWindowAnimated()
         }
@@ -15610,6 +16763,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tabEditorModes.append(.normal)
         tabEditorURLs.append(nil)
         tabEditorDirty.append(false)
+        tabPreviewActive.append(false)
         splitContainers.append(container)
         activeTab = termViews.count - 1
         container.alphaValue = 0
@@ -15642,19 +16796,47 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.canChooseFiles = true
         panel.beginSheetModal(for: window) { [weak self] result in
             guard let self = self, result == .OK, let url = panel.url else { return }
-            guard let content = try? String(contentsOf: url, encoding: .utf8) else { return }
-            ev.textView.string = content
+            if let err = self.validateTextFile(url) {
+                let overlay = EditorAlertOverlay.warning(
+                    filename: url.lastPathComponent, reason: err) { [weak self] in self?.activeOverlay = nil }
+                self.showEditorOverlay(overlay)
+                return
+            }
+            if capturedTab < self.tabEditorURLs.count  { self.tabEditorURLs[capturedTab]  = url }
+            if capturedTab < self.tabCustomNames.count { self.tabCustomNames[capturedTab] = url.lastPathComponent }
+            if capturedTab < self.tabEditorDirty.count { self.tabEditorDirty[capturedTab] = false }
             ev.setLanguage(SyntaxLanguage.detect(from: url))
-            if capturedTab < self.tabEditorURLs.count {
-                self.tabEditorURLs[capturedTab] = url
-            }
-            if capturedTab < self.tabEditorDirty.count {
-                self.tabEditorDirty[capturedTab] = false
-            }
-            if capturedTab < self.tabCustomNames.count {
-                self.tabCustomNames[capturedTab] = url.lastPathComponent
-            }
             self.updateHeaderTabs()
+            let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+            let size = attrs?[.size] as? Int ?? 0
+            if size > 512 * 1024 {
+                let task = FileLoadTask()
+                self.activeLoadTask = task
+                let overlay = EditorAlertOverlay.loading(
+                    filename: url.lastPathComponent, fileSize: size
+                ) { [weak self] in
+                    self?.activeLoadTask?.cancel()
+                    self?.activeLoadTask = nil
+                    self?.activeOverlay = nil
+                }
+                self.showEditorOverlay(overlay)
+                task.load(url: url, totalSize: size,
+                          progress: { [weak overlay] frac in overlay?.updateProgress(frac) },
+                          completion: { [weak self] content in
+                    guard let self = self else { return }
+                    self.dismissActiveOverlay()
+                    guard capturedTab < self.tabEditorViews.count,
+                          let ev2 = self.tabEditorViews[capturedTab] else { return }
+                    ev2.textView.string = content ?? ""
+                    if capturedTab < self.tabEditorDirty.count { self.tabEditorDirty[capturedTab] = false }
+                })
+            } else {
+                let content = (try? String(contentsOf: url, encoding: .utf8))
+                           ?? (try? String(contentsOf: url, encoding: .isoLatin1))
+                           ?? ""
+                ev.textView.string = content
+                if capturedTab < self.tabEditorDirty.count { self.tabEditorDirty[capturedTab] = false }
+            }
         }
     }
 
@@ -15690,7 +16872,108 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc func createEditorTab() { createEditorTabInternal(url: nil) }
 
+    /// Called by EditorTextView drag-drop — validates + opens in new editor tab.
+    func openFileInEditor(_ url: URL) { createEditorTabInternal(url: url) }
+
+    // MARK: - Preview
+
+    private let previewableExtensions: Set<String> = ["html", "htm", "md", "markdown", "mdown", "mkd", "svg", "csv"]
+
+    func isTabPreviewable(_ tab: Int) -> Bool {
+        guard tab < tabEditorURLs.count, let url = tabEditorURLs[tab] else { return false }
+        return previewableExtensions.contains(url.pathExtension.lowercased())
+    }
+
+    func togglePreview() {
+        guard activeTab < tabTypes.count, tabTypes[activeTab] == .editor,
+              activeTab < tabEditorViews.count, let ev = tabEditorViews[activeTab] else { return }
+        let wasActive = activeTab < tabPreviewActive.count && tabPreviewActive[activeTab]
+        if wasActive {
+            tabPreviewActive[activeTab] = false
+            ev.hidePreview()
+            headerView.setPreviewActive(false)
+        } else {
+            guard let html = buildPreviewHTML(for: activeTab) else { return }
+            let baseURL: URL?
+            if activeTab < tabEditorURLs.count, let u = tabEditorURLs[activeTab] {
+                baseURL = u.deletingLastPathComponent()
+            } else {
+                baseURL = nil
+            }
+            if activeTab < tabPreviewActive.count { tabPreviewActive[activeTab] = true }
+            ev.showPreview(html: html, baseURL: baseURL)
+            headerView.setPreviewActive(true)
+        }
+    }
+
+    private func buildPreviewHTML(for tab: Int) -> String? {
+        guard tab < tabEditorViews.count, let ev = tabEditorViews[tab] else { return nil }
+        let url = tab < tabEditorURLs.count ? tabEditorURLs[tab] : nil
+        let ext = url?.pathExtension.lowercased() ?? ""
+        let text = ev.textView.string
+        let isDark = NSColor(cgColor: kTermBgCGColor)?.brightnessComponent ?? 0 < 0.5
+        switch ext {
+        case "html", "htm":                        return text
+        case "md", "markdown", "mdown", "mkd":     return markdownToHTML(text, isDark: isDark)
+        case "svg":                                return svgToHTML(text, isDark: isDark)
+        case "csv":                                return csvToHTML(text, isDark: isDark)
+        default:                                   return nil
+        }
+    }
+
+    // Returns nil if file passes, or a user-facing error string.
+    private func validateTextFile(_ url: URL) -> String? {
+        let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let size = attrs?[.size] as? Int ?? 0
+        if size > 50 * 1024 * 1024 {
+            let mb = String(format: "%.1f", Double(size) / 1_048_576)
+            return "\"\(url.lastPathComponent)\" ist \(mb) MB groß. Der Editor unterstützt Dateien bis 50 MB."
+        }
+        if let handle = FileHandle(forReadingAtPath: url.path) {
+            let sample = handle.readData(ofLength: 512)
+            handle.closeFile()
+            if sample.contains(0) {
+                return "\"\(url.lastPathComponent)\" scheint eine Binärdatei zu sein und kann nicht im Text-Editor angezeigt werden."
+            }
+        }
+        return nil
+    }
+
+    // Active overlay + load task — at most one at a time.
+    private var activeOverlay: EditorAlertOverlay?
+    private var activeLoadTask: FileLoadTask?
+
+    private func showEditorOverlay(_ overlay: EditorAlertOverlay) {
+        activeOverlay?.dismissAnimated()
+        guard let cv = window.contentView else { return }
+        overlay.frame = cv.bounds
+        overlay.alphaValue = 0
+        cv.addSubview(overlay, positioned: .above, relativeTo: nil)
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.15
+            overlay.animator().alphaValue = 1
+        })
+        activeOverlay = overlay
+    }
+
+    private func dismissActiveOverlay() {
+        activeOverlay?.dismissAnimated()
+        activeOverlay = nil
+        activeLoadTask?.cancel()
+        activeLoadTask = nil
+    }
+
     private func createEditorTabInternal(url: URL?) {
+        // Binary / size validation — show styled overlay, no tab created.
+        if let url = url, let err = validateTextFile(url) {
+            let overlay = EditorAlertOverlay.warning(
+                filename: url.lastPathComponent, reason: err) { [weak self] in
+                    self?.activeOverlay = nil
+            }
+            showEditorOverlay(overlay)
+            return
+        }
+
         let tf = termFrame()
 
         let editorView = EditorView(frame: tf)
@@ -15722,17 +17005,50 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tabEditorModes.append(.normal)
         tabEditorURLs.append(url)
         tabEditorDirty.append(false)
+        tabPreviewActive.append(false)
         splitContainers.append(placeholder)
         tabColors.append(NSColor(calibratedHue: CGFloat.random(in: 0...1),
                                   saturation: 0.65, brightness: 0.85, alpha: 1.0))
         tabCustomNames.append(Loc.editorTabName)
-        // If a URL was provided, load content + set language + tab name
-        if let url = url,
-           let content = try? String(contentsOf: url, encoding: .utf8) {
-            editorView.textView.string = content
-            editorView.setLanguage(SyntaxLanguage.detect(from: url))
+        // If a URL was provided, load content asynchronously (shows spinner for large files)
+        if let url = url {
             tabCustomNames[tabCustomNames.count - 1] = url.lastPathComponent
-            tabEditorDirty[tabEditorDirty.count - 1] = false
+            editorView.setLanguage(SyntaxLanguage.detect(from: url))
+            let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+            let size = attrs?[.size] as? Int ?? 0
+            let newTabIdx = termViews.count - 1  // captured before async
+            if size > 512 * 1024 {
+                // Show loading overlay with real progress
+                let task = FileLoadTask()
+                activeLoadTask = task
+                let overlay = EditorAlertOverlay.loading(
+                    filename: url.lastPathComponent, fileSize: size
+                ) { [weak self] in
+                    // Cancel: remove the empty tab that was just created
+                    self?.activeLoadTask?.cancel()
+                    self?.activeLoadTask = nil
+                    self?.activeOverlay = nil
+                    self?.closeTab(index: newTabIdx)
+                }
+                showEditorOverlay(overlay)
+                task.load(url: url, totalSize: size,
+                          progress: { [weak overlay] frac in overlay?.updateProgress(frac) },
+                          completion: { [weak self] content in
+                    guard let self = self else { return }
+                    self.dismissActiveOverlay()
+                    guard newTabIdx < self.tabEditorViews.count,
+                          let ev = self.tabEditorViews[newTabIdx] else { return }
+                    ev.textView.string = content ?? ""
+                    if newTabIdx < self.tabEditorDirty.count { self.tabEditorDirty[newTabIdx] = false }
+                })
+            } else {
+                // Small file — load synchronously, no overlay needed
+                let content = (try? String(contentsOf: url, encoding: .utf8))
+                           ?? (try? String(contentsOf: url, encoding: .isoLatin1))
+                           ?? ""
+                editorView.textView.string = content
+                tabEditorDirty[tabEditorDirty.count - 1] = false
+            }
         }
         tabGitPositions.append(.none)
         tabGitPanels.append(nil)
@@ -15742,6 +17058,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tabGitRatiosH.append(gitDefaultRatioH)
 
         activeTab = termViews.count - 1
+
+        // Wire up dirty tracking — fires on every character edit
+        let tabIdx = activeTab
+        editorView.onTextEdited = { [weak self] in
+            guard let self = self, tabIdx < self.tabEditorDirty.count else { return }
+            if !self.tabEditorDirty[tabIdx] {
+                self.tabEditorDirty[tabIdx] = true
+                self.updateHeaderTabs()
+            }
+        }
 
         editorView.alphaValue = 0
         window.contentView?.addSubview(editorView)
@@ -15766,6 +17092,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func closeTab(index: Int) {
         guard index >= 0 && index < termViews.count && termViews.count > 1,
               index < splitContainers.count else { return }
+
+        // Unsaved editor tab → show custom dark alert, then close asynchronously
+        if index < tabTypes.count, tabTypes[index] == .editor,
+           index < tabEditorDirty.count, tabEditorDirty[index],
+           let cv = window.contentView {
+            UnsavedAlertView.show(
+                in: cv,
+                title:        Loc.unsavedTitle,
+                message:      Loc.unsavedMessage,
+                saveLabel:    Loc.unsavedSave,
+                discardLabel: Loc.unsavedDiscard,
+                cancelLabel:  Loc.unsavedCancel,
+                onSave:    { [weak self] in self?.saveCurrentEditor(); self?.doCloseTab(index: index) },
+                onDiscard: { [weak self] in self?.doCloseTab(index: index) },
+                onCancel:  { }
+            )
+            return
+        }
+        doCloseTab(index: index)
+    }
+
+    private func doCloseTab(index: Int) {
+        guard index >= 0 && index < termViews.count && termViews.count > 1,
+              index < splitContainers.count else { return }
         let container = splitContainers[index]
         // Remove editor view from hierarchy if this is an editor tab
         if index < tabEditorViews.count, let ev = tabEditorViews[index] {
@@ -15774,10 +17124,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         termViews.remove(at: index)
         splitContainers.remove(at: index)
         if index < tabTypes.count { tabTypes.remove(at: index) }
-        if index < tabEditorViews.count { tabEditorViews.remove(at: index) }
-        if index < tabEditorModes.count { tabEditorModes.remove(at: index) }
-        if index < tabEditorURLs.count  { tabEditorURLs.remove(at: index) }
-        if index < tabEditorDirty.count { tabEditorDirty.remove(at: index) }
+        if index < tabEditorViews.count   { tabEditorViews.remove(at: index) }
+        if index < tabEditorModes.count   { tabEditorModes.remove(at: index) }
+        if index < tabEditorURLs.count    { tabEditorURLs.remove(at: index) }
+        if index < tabEditorDirty.count   { tabEditorDirty.remove(at: index) }
+        if index < tabPreviewActive.count { tabPreviewActive.remove(at: index) }
         if index < tabColors.count { tabColors.remove(at: index) }
         if index < tabCustomNames.count { tabCustomNames.remove(at: index) }
         if index < tabGitPanels.count {
@@ -15799,6 +17150,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             activeTab -= 1
         } else if activeTab == index {
             activeTab = min(index, termViews.count - 1)
+        }
+
+        // Show/hide editor views — mirrors switchToTab logic
+        for (i, ev) in tabEditorViews.enumerated() {
+            ev?.isHidden = (i != activeTab)
         }
 
         // Show the new active tab container with fade-in
@@ -15825,8 +17181,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             container.removeFromSuperview()
         })
 
-        if activeTab >= 0 && activeTab < termViews.count {
-            if let tv = termViews[activeTab] { window.makeFirstResponder(tv) }
+        // Focus: editor text view for editor tabs, terminal for others
+        if activeTab < tabTypes.count, tabTypes[activeTab] == .editor {
+            window.makeFirstResponder(tabEditorViews[activeTab]?.textView)
+        } else if let tv = termViews[activeTab] {
+            window.makeFirstResponder(tv)
         }
         // Ensure new active tab's git panel is visible
         if activeTab < tabGitPanels.count {
@@ -15875,6 +17234,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             tabEditorURLs.insert(eu, at: to)
             let ed = tabEditorDirty.remove(at: from)
             tabEditorDirty.insert(ed, at: to)
+            if from < tabPreviewActive.count && to < tabPreviewActive.count {
+                let pa = tabPreviewActive.remove(at: from)
+                tabPreviewActive.insert(pa, at: to)
+            }
         }
         if from < tabGitPositions.count && to < tabGitPositions.count {
             let pos = tabGitPositions.remove(at: from)
@@ -16438,29 +17801,42 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.animator().setFrame(f, display: true)
         }, completionHandler: { [weak self] in
             self?.updateWindowMask()
+            self?.saveWindowSize()
         })
     }
 
     func updateHeaderTabs() {
         let home = NSHomeDirectory()
         let titles = termViews.enumerated().map { (i, tv) -> String in
-            // Use custom name if set, otherwise derive from cwd
+            // Base name: custom name or cwd-derived
+            let base: String
             if i < tabCustomNames.count, let custom = tabCustomNames[i] {
-                return custom
+                base = custom
+            } else if let tv = tv {
+                let pid = tv.childPid
+                if pid > 0 {
+                    let cwd = cwdForPid(pid)
+                    base = cwd == home ? "~" : (cwd as NSString).lastPathComponent
+                } else {
+                    base = "~"
+                }
+            } else {
+                base = "~"
             }
-            guard let tv = tv else { return "~" }
-            let pid = tv.childPid
-            if pid > 0 {
-                let cwd = cwdForPid(pid)
-                if cwd == home { return "~" }
-                return (cwd as NSString).lastPathComponent
-            }
-            return "~"
+            // Prepend unsaved-dot for dirty editor tabs
+            let dirty = i < tabEditorDirty.count && tabEditorDirty[i]
+            return dirty ? "• \(base)" : base
         }
         headerView.updateTabs(count: termViews.count, activeIndex: activeTab,
                               titles: titles, colors: tabColors)
         let editorActive = activeTab < tabTypes.count && tabTypes[activeTab] == .editor
         headerView.setFileButtonsVisible(editorActive)
+        let previewable = editorActive && isTabPreviewable(activeTab)
+        headerView.setPreviewButtonVisible(previewable)
+        if previewable {
+            let previewOn = activeTab < tabPreviewActive.count && tabPreviewActive[activeTab]
+            headerView.setPreviewActive(previewOn)
+        }
     }
 
     func updateFooter() {
@@ -16977,6 +18353,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    /// Returns `frame` clamped so it lies entirely within `screen.visibleFrame`.
+    /// If `screen` is nil, returns `frame` unchanged.
+    func clampFrameToScreen(_ frame: NSRect, screen: NSScreen?) -> NSRect {
+        guard let vis = screen?.visibleFrame else { return frame }
+        var f = frame
+        // Clamp size first (can't be larger than screen)
+        f.size.width  = min(f.size.width,  vis.width)
+        f.size.height = min(f.size.height, vis.height)
+        // Clamp origin so frame stays inside
+        f.origin.x = max(vis.minX, min(f.origin.x, vis.maxX - f.size.width))
+        f.origin.y = max(vis.minY, min(f.origin.y, vis.maxY - f.size.height))
+        return f
+    }
+
     func positionWindowUnderTrayIcon() {
         let wSize = window.frame.size
         let midX: CGFloat
@@ -17001,18 +18391,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             // Button not placed yet — fall back to main screen visibleFrame.
             // visibleFrame.maxY ≈ trayIcon.minY in practice, so this lands within 1–2px
-            // of the real position. The 150ms retry will apply the exact final position.
+            // of the real position. The 400ms retry will apply the exact final position.
             guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
-            let fallbackY = round(screen.visibleFrame.maxY - 4 - wSize.height)
-            guard fallbackY > 0 else { return }
-            y = fallbackY
+            var fallbackY = round(screen.visibleFrame.maxY - 4 - wSize.height)
+            if fallbackY <= 0 {
+                // Window taller than screen — clamp height so it always fits
+                let clampedH = max(220, screen.visibleFrame.height - 80)
+                window.setContentSize(NSSize(width: wSize.width, height: clampedH))
+                fallbackY = round(screen.visibleFrame.maxY - 4 - clampedH)
+            }
+            y = max(0, fallbackY)
             midX = round(screen.visibleFrame.midX)
         }
 
-        // X uses saved value if available (respects user horizontal resize preference).
+        // X: detached windows restore saved position; docked windows always center under tray icon.
+        // (Saving/restoring X for docked windows causes feedback loops when the button
+        //  hasn't been placed yet and the fallback screen-center was written to defaults.)
         let defaultX = round(midX - wSize.width / 2)
         let x: CGFloat
-        if UserDefaults.standard.object(forKey: "windowX") != nil {
+        if isWindowDetached, UserDefaults.standard.object(forKey: "windowX") != nil {
             let sx = CGFloat(UserDefaults.standard.double(forKey: "windowX"))
             let testRect = NSRect(origin: NSPoint(x: sx, y: y), size: wSize)
             let onScreen = NSScreen.screens.contains { $0.visibleFrame.intersects(testRect) }
@@ -17020,7 +18417,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             x = defaultX
         }
-        window.setFrameOrigin(NSPoint(x: x, y: y))
+
+        // Final clamp: ensure window never extends outside the visible screen area.
+        let screen = NSScreen.main ?? NSScreen.screens.first
+        let finalFrame = clampFrameToScreen(NSRect(origin: NSPoint(x: x, y: y), size: window.frame.size), screen: screen)
+        window.setFrameOrigin(finalFrame.origin)
     }
 
     @objc func toggleWindow() {
@@ -17122,14 +18523,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         updateHeaderArrowLayout()
         layoutGitPanel()
 
-        // Restore saved position (X and Y both saved for detached windows)
+        // Restore saved position (X and Y both saved for detached windows).
+        // Always clamp to the visible screen so the window can't appear off-screen.
         let savedX = UserDefaults.standard.double(forKey: "windowX")
         let savedY = UserDefaults.standard.double(forKey: "windowY")
         if savedX != 0 || savedY != 0 {
             let origin = NSPoint(x: CGFloat(savedX), y: CGFloat(savedY))
-            let testRect = NSRect(origin: origin, size: window.frame.size)
-            let onScreen = NSScreen.screens.contains { $0.visibleFrame.intersects(testRect) }
-            if onScreen { window.setFrameOrigin(origin) }
+            let rawRect = NSRect(origin: origin, size: window.frame.size)
+            let clamped = clampFrameToScreen(rawRect, screen: NSScreen.main ?? NSScreen.screens.first)
+            window.setFrameOrigin(clamped.origin)
         }
 
         // Show immediately at restored position — no fade-in animation at startup.
@@ -17840,8 +19242,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }, completionHandler: { [weak self] in self?.activateAfterSnap() })
         UserDefaults.standard.set(Double(defaultSize.width), forKey: "windowWidth")
         UserDefaults.standard.set(Double(defaultSize.height), forKey: "windowHeight")
-        UserDefaults.standard.set(Double(newFrame.origin.x), forKey: "windowX")
-        UserDefaults.standard.set(Double(newFrame.origin.y), forKey: "windowY")
+        if isWindowDetached {
+            UserDefaults.standard.set(Double(newFrame.origin.x), forKey: "windowX")
+            UserDefaults.standard.set(Double(newFrame.origin.y), forKey: "windowY")
+        }
     }
 
     func clearSnapStates() {
@@ -18142,17 +19546,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         })
     }
 
+    func saveWindowSize() {
+        let f = window.frame
+        UserDefaults.standard.set(Double(f.size.width),  forKey: "windowWidth")
+        UserDefaults.standard.set(Double(f.size.height), forKey: "windowHeight")
+        if isWindowDetached {
+            UserDefaults.standard.set(Double(f.origin.x), forKey: "windowX")
+            UserDefaults.standard.set(Double(f.origin.y), forKey: "windowY")
+        }
+    }
+
     func windowDidResize(_ notification: Notification) {
         updateWindowMask()
         centerCommandPalette()
         layoutGitPanel()
-        guard !isAnimating, window.isVisible, window.alphaValue > 0 else { return }
+        guard !isAnimating, window.isVisible else { return }
         let frame = window.frame
+        // Always save size so next launch opens at the same dimensions.
         UserDefaults.standard.set(Double(frame.size.width), forKey: "windowWidth")
         UserDefaults.standard.set(Double(frame.size.height), forKey: "windowHeight")
-        UserDefaults.standard.set(Double(frame.origin.x), forKey: "windowX")
         if isWindowDetached {
-            // Detached: also save Y so position is fully restored on next launch.
+            // Detached: save X/Y so position is fully restored on next launch.
+            UserDefaults.standard.set(Double(frame.origin.x), forKey: "windowX")
             UserDefaults.standard.set(Double(frame.origin.y), forKey: "windowY")
         }
         // When docked, do NOT save Y — it is always derived from the tray icon.
@@ -18176,11 +19591,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let item = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             let origin = self.window.frame.origin
-            UserDefaults.standard.set(Double(origin.x), forKey: "windowX")
             if self.isWindowDetached {
+                // Detached: save both X and Y for full position restore.
+                UserDefaults.standard.set(Double(origin.x), forKey: "windowX")
                 UserDefaults.standard.set(Double(origin.y), forKey: "windowY")
+            } else {
+                self.settingsOverlay?.updateResetButtonState()
             }
-            if !self.isWindowDetached { self.settingsOverlay?.updateResetButtonState() }
         }
         windowMoveWorkItem = item
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: item)
@@ -18319,6 +19736,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Always persist the final window size so next launch opens at the same size.
+        if let w = window {
+            UserDefaults.standard.set(Double(w.frame.size.width),  forKey: "windowWidth")
+            UserDefaults.standard.set(Double(w.frame.size.height), forKey: "windowHeight")
+            if isWindowDetached {
+                UserDefaults.standard.set(Double(w.frame.origin.x), forKey: "windowX")
+                UserDefaults.standard.set(Double(w.frame.origin.y), forKey: "windowY")
+            }
+        }
         saveSession()
         if let m = globalClickMonitor { NSEvent.removeMonitor(m); globalClickMonitor = nil }
         if let ref = hotKeyRef { UnregisterEventHotKey(ref) }
