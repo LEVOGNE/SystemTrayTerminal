@@ -38,7 +38,7 @@ echo "    AppIcon.icns created"
 # ─── Step 2: Compile binary ───
 echo "[2/4] Compiling binary..."
 swiftc -O systemtrayterminal.swift -o "${APP_NAME}_bin" \
-  -framework Cocoa -framework Carbon -framework AVKit \
+  -framework Cocoa -framework Carbon -framework AVKit -framework WebKit \
   -Xlinker -sectcreate -Xlinker __FONTS -Xlinker __jbmono -Xlinker _JetBrainsMono-LightItalic-terminal.ttf \
   -Xlinker -sectcreate -Xlinker __FONTS -Xlinker __monocraft -Xlinker _Monocraft-terminal.ttf \
   -Xlinker -sectcreate -Xlinker __DATA -Xlinker __readme -Xlinker README.md \
