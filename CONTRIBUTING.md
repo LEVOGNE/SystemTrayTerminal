@@ -1,4 +1,4 @@
-# Contributing to quickTERMINAL
+# Contributing to SystemTrayTerminal
 
 Thanks for contributing.
 
@@ -19,7 +19,7 @@ Build:
 
 ```bash
 bash build.sh
-./quickTerminal
+./SystemTrayTerminal
 ```
 
 ## Development Guidelines
@@ -53,14 +53,14 @@ Examples:
 
 For maintainers publishing a new GitHub Release:
 
-- [ ] Bump version in `kAppVersion` (quickTerminal.swift), `build_app.sh`, `build_zip.sh` — all three must match.
+- [ ] Bump version in `kAppVersion` (SystemTrayTerminal.swift), `build_app.sh`, `build_zip.sh` — all three must match.
 - [ ] Run `bash build.sh` — all tests must pass (0 failed).
 - [ ] Run `bash build_zip.sh` — confirms `.app` bundle + `install.sh` + `FIRST_READ.txt` are in the ZIP.
 - [ ] Generate SHA256 checksum and upload alongside the ZIP:
   ```bash
-  shasum -a 256 quickTerminal.zip > quickTerminal.zip.sha256
+  shasum -a 256 SystemTrayTerminal.zip > SystemTrayTerminal.zip.sha256
   ```
-  **Both files must be attached to the GitHub Release.** The updater downloads `quickTerminal.zip.sha256` and verifies the ZIP before installing. Missing the file downgrades the update to unverified (no hash check).
+  **Both files must be attached to the GitHub Release.** The updater downloads `SystemTrayTerminal.zip.sha256` and verifies the ZIP before installing. Missing the file downgrades the update to unverified (no hash check).
 - [ ] Update `CHANGELOG.md` with the new version section.
 - [ ] Tag the release: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 

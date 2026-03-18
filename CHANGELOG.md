@@ -1,33 +1,45 @@
 # Changelog
 
-All notable changes to quickTERMINAL are documented here.
+All notable changes to SystemTrayTerminal are documented here.
 
 ---
 
-## v1.5.0 — 2026-03-16
+## v1.5.0 — 2026-03-14 … 2026-03-18
 
 ### New Features
-- **Text Editor Tab** — Open a full text editor tab alongside terminal tabs. Click `+` → "Text Editor" or press `⌘E`. Supports open (`⌘O`), save (`⌘S`), and save-as (`⌘⇧S`) with native sheet panels.
-- **Syntax Highlighting** — Live token coloring auto-detected from file extension:
-  JSON, HTML/HTM, CSS, JavaScript/TypeScript (JS/MJS/CJS/TS/TSX/JSX).
-  Regex-based engine, debounced at 150ms. Colors adapt to dark/light theme automatically.
-- **File Drop on Tab Header** — Drag any text file from Finder onto the tab bar
-  to open it in a new editor tab with syntax highlighting applied automatically.
-- **Editor Modes** — Three input modes selectable via footer buttons: `NORMAL` (plain NSTextView), `NANO` (`Ctrl+S/X/K/U` shortcuts), `VIM` (modal hjkl/insert/dd/yy/p/:/wq).
-- **Vim Mode** — Minimal modal editing: hjkl + arrow key navigation, `i/a/o` insert, `dd` delete line, `yy` yank, `p` paste, `0/$` line start/end, `:w/:q/:wq` file operations. Status bar shows `── NORMAL ──` / `── INSERT ──`.
+- **Text Editor Tab** — Open a full text editor tab alongside terminal tabs. Long-press `+` → "Text Editor" or press `⌘E`. Supports open (`⌘O`), save (`⌘S`), and save-as (`⌘⇧S`) with native sheet panels.
+- **Syntax Highlighting** — Live token coloring auto-detected from file extension: JSON, HTML/HTM, CSS, JavaScript/TypeScript (JS/MJS/CJS/TS/TSX/JSX), XML, Markdown, Shell, Python, YAML, TOML, Swift, SQL, INI/Dockerfile. Regex-based engine, debounced at 150ms. Colors adapt to dark/light theme automatically.
+- **Live Preview** — Split-pane live preview for HTML, SVG, Markdown, and CSV files. Preview updates as you type with no manual refresh. Powered by WebKit. Toggle from the editor header.
+- **File Drop on Tab Header** — Drag any text file from Finder onto the tab bar to open it in a new editor tab with syntax highlighting applied automatically.
+- **Editor Modes** — Three input modes selectable via footer buttons: `NORMAL` (plain NSTextView), `NANO` (`Ctrl+S/X/K/U` shortcuts with shortcut strip), `VIM` (modal hjkl/insert/dd/yy/p/:/wq with mode indicator).
+- **Vim Mode** — Minimal modal editing: `hjkl` + arrow key navigation, `i/a/o` insert, `dd` delete line, `yy` yank, `p` paste, `0/$` line start/end, `:w/:q/:wq` file operations. Status bar shows `── NORMAL ──` / `── INSERT ──`.
 - **Nano Mode** — Shortcut bar with `^S Save  ^X Close  ^K Cut Line  ^U Paste`. Keys intercepted at window level.
-- **Session Persistence** — Editor tabs (including open file URL and editor mode) are saved and restored across restarts.
+- **Unsaved Changes Indicator** — Tab name gets a `•` dot prefix whenever the editor content has unsaved changes. Dot disappears after saving.
+- **Custom Dark Alert Modal** — Replaces the system `NSAlert` when closing a tab with unsaved content. Renders in the same dark style as quickBAR: dim overlay, ⚠️ warning icon, three buttons (Save / Discard / Cancel) with hover color, press state, and pointing-hand cursor. Localized in all 10 languages.
+- **SF Symbol Header Buttons** — Open, Save, and Save As editor buttons use SF Symbols (`folder`, `square.and.arrow.down`, `square.and.arrow.down.on.square`) — fully language-independent.
+- **Custom Line Number Gutter** — `LineGutterView` (pure `NSView`, 44 px wide, no `NSRulerView`). Line numbers drawn via `NSLayoutManager`, right-aligned with 8 px padding at 10 pt monospaced system font. Synced to editor scroll via `NSView.boundsDidChangeNotification`. Colors adapt automatically to dark/light theme.
+- **Print Modal** — Printer button (SF Symbol `printer`) in the footer bar. Tap to open a dark modal panel with context-aware print options: terminal tab → styled HTML; Markdown / HTML / SVG / CSV editor tabs → formatted preview + source-code options; all other editors → source-code only. HTML is built lazily (only when the user confirms). Prints via native macOS dialog (`NSPrintOperation` for source, `WKWebView.printOperation` for rendered HTML).
+- **Search & Replace** — `⌘F` find with match highlighting, `⌘H` find & replace panel.
+- **Window Size Persistence** — Last window dimensions saved on every resize and restored on next launch. Saved size is clamped to the visible screen area on startup.
+- **Window Always On Screen** — `clampFrameToScreen()` ensures the window never extends outside the visible screen area, at launch and when restoring detached position.
+- **Edge Double-Click Expand (docked-aware)** — Double-click any window edge to maximize in that direction. Docked: left expands left (right edge stays over tray icon), right expands right, bottom expands down. Detached: snaps to the respective screen half. Full-screen from docked mode is explicitly blocked.
+- **Session Persistence** — Editor tabs (open file URL and editor mode) saved and restored across restarts.
 - **Theme Sync** — Editor background and text color automatically follow the active color theme.
+- **10-Language Localization** — All editor and modal strings fully translated: EN, DE, TR, ES, FR, IT, AR, JA, ZH, RU.
 
 ### Bug Fixes
-- **Window positioning flash on launch** — Docked window now waits 200 ms for status-bar item coordinates to stabilize before calling `showWindowAnimated()`. Eliminates flash/jump since v1.3.
+- **Window opens at screen center when docked** — Startup height clamping now uses `screenVis.height - 80` instead of `× 0.95`. Bad saved heights are corrected and persisted back to `UserDefaults` on first launch.
+- **`positionWindowUnderTrayIcon` silent no-op on oversized window** — `guard fallbackY > 0 else { return }` replaced: window is now resized to fit and positioned correctly instead of doing nothing.
+- **Detached window could restore off-screen** — `restoreDetachedWindowState` now passes the restored frame through `clampFrameToScreen` before applying it.
+- **Window positioning flash on launch** — Docked window waits 400 ms (increased from 200 ms) for status-bar item coordinates to stabilize before calling `showWindowAnimated()`.
 - **Multiple editor tabs background darkening** — Each new editor tab no longer composites on top of the previous one; views are properly hidden before the new one is shown.
-- **File panels appearing behind window** — `NSOpenPanel` / `NSSavePanel` now use `beginSheetModal(for:)`, attaching them as sheets to the window instead of floating behind it.
+- **File panels appearing behind window** — `NSOpenPanel` / `NSSavePanel` now use `beginSheetModal(for:)`, attaching them as sheets to the window.
 - **Version button not clickable** — Tab content views are re-added below the version button in z-order after each tab creation.
-- **Version button shows text cursor** — HoverButton now has `resetCursorRects`, `cursorUpdate`, and `.cursorUpdate` tracking area. TerminalView and EditorTextView both early-return when the cursor is over the version button.
+- **Text cursor over editor header buttons** — `SymbolHoverButton` / `AlertButton` override `cursorUpdate` to set `NSCursor.pointingHand`; tracking areas use `.cursorUpdate` + `.activeAlways`.
+- **Hover states on alert buttons not firing** — Replaced transparent hit-area overlay (unreliable without a layer) with `AlertButton` that IS the background, `wantsLayer = true` from init, `.activeAlways` tracking.
 - **`+` → Terminal opened editor** — Removed incorrect branch in `addTab()` that called `createEditorTab()` when the active tab was an editor.
-- **Vim cursor invisible in normal mode** — `isEditable` stays `true` in all Vim sub-modes; key blocking is handled entirely by `BorderlessWindow.sendEvent`.
-- **Vim normal mode typing** — All unrecognized keyDown events in normal mode are now consumed by `sendEvent` before reaching NSTextView.
+- **Vim cursor invisible in normal mode** — `isEditable` stays `true` in all Vim sub-modes; key blocking handled entirely by `BorderlessWindow.sendEvent`.
+- **Vim normal mode typing** — All unrecognized keyDown events in normal mode consumed by `sendEvent` before reaching NSTextView.
 
 ---
 
@@ -71,9 +83,9 @@ All notable changes to quickTERMINAL are documented here.
 
 ### New Features
 - **WebPicker** — Chrome DevTools Protocol (CDP) based DOM element picker. Connects to Chrome via WebSocket, lets you hover-select any element on any webpage, copies `outerHTML` to clipboard and auto-pastes into terminal. Floating sidebar with Connect/Disconnect toggle, live hostname display, and element preview.
-- **Onboarding Video** — First-launch intro panel (480×300, centered). Plays `quickTERMINAL.mp4` once using AVKit, auto-closes when done, has "✕ Skip" button. Never shown again after first view (UserDefaults flag).
+- **Onboarding Video** — First-launch intro panel (480×300, centered). Plays `SystemTrayTerminal.mp4` once using AVKit, auto-closes when done, has "✕ Skip" button. Never shown again after first view (UserDefaults flag).
 - **Full English UI** — All UI strings translated to English: Git panel, WebPicker, GitHub auth, feedback toasts, error messages, Claude API strings.
-- **Demo GIF** — `quickTERMINAL.gif` added to README (MP4 → GIF, 700px, 2.4 MB, auto-plays on GitHub).
+- **Demo GIF** — `SystemTrayTerminal.gif` added to README (MP4 → GIF, 700px, 2.4 MB, auto-plays on GitHub).
 
 ### Bug Fixes
 - **WebSocket silent death** — `ChromeCDPClient.receiveLoop` now fires `onDisconnected` callback on `.failure`, preventing the UI from getting stuck in "connected" state when Chrome crashes or the tab is killed externally.

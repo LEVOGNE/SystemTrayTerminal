@@ -1,4 +1,4 @@
-# quickTerminal — Remaining Compatibility Gaps (~4-5%)
+# SystemTrayTerminal — Remaining Compatibility Gaps (~4-5%)
 
 Current compatibility score: **~99-100%** (all gaps resolved: OSC resets, DECRQM, DECSCA, DECDWL/DECDHL, DECBI/DECFI, DECLRMM, BiDi/RTL).
 
@@ -17,7 +17,7 @@ The SET counterparts (OSC 4/10/11/12) are implemented, but their reset variants 
 - **OSC 111 ST** — Reset background color to default
 - **OSC 112 ST** — Reset cursor color to default
 
-**Where:** `handleOSC()` in `quickTerminal.swift`
+**Where:** `handleOSC()` in `SystemTrayTerminal.swift`
 **Effort:** Low — just clear `paletteOverrides[idx]`, `dynamicFG`, `dynamicBG`, `dynamicCursor`
 
 ---

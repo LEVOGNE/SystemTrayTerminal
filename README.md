@@ -1,28 +1,28 @@
 <div align="center">
 
-<img src="icon.png" width="128" alt="quickTERMINAL">
+<img src="icon.png" width="128" alt="SystemTrayTerminal">
 
 <br>
 
-<img src="quickTERMINAL.gif" width="700" alt="quickTERMINAL Demo">
+<img src="SystemTrayTerminal.gif" width="700" alt="SystemTrayTerminal Demo">
 
 <br>
 
 **A blazing-fast, single-file terminal emulator for macOS.**
 
-*Zero dependencies. Pure Swift. Lives in your menu bar. Built-in SSH Manager, Git panel, Claude Code integration & auto-updater. 4.8 MB app bundle.*
+*Zero dependencies. Pure Swift. Lives in your menu bar. Built-in Text Editor, SSH Manager, Git panel, Claude Code integration & auto-updater. 4.8 MB app bundle.*
 
 <br>
 
 ![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=for-the-badge&logo=apple&logoColor=white)
 ![Swift](https://img.shields.io/badge/Swift-5.9-F05138?style=for-the-badge&logo=swift&logoColor=white)
-![Lines](https://img.shields.io/badge/17000%2B_Lines-One_File-blue?style=for-the-badge)
+![Lines](https://img.shields.io/badge/17700%2B_Lines-One_File-blue?style=for-the-badge)
 ![App](https://img.shields.io/badge/App-4.8_MB-purple?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-Free_for_Personal_Use-green?style=for-the-badge)
 
 <br>
 
-[**Download quickTerminal.app (v1.4.0)**](https://github.com/LEVOGNE/quickTerminal/releases/latest) · [**Website**](https://levogne.github.io/quickTerminal/)
+[**Download SystemTrayTerminal.app (v1.5.0)**](https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest) · [**Website**](https://levogne.github.io/SystemTrayTerminal/)
 
 ---
 
@@ -32,17 +32,17 @@
 
 > **Download → Unzip → Remove Quarantine → Done.**
 
-1. Download [`quickTerminal.zip`](https://github.com/LEVOGNE/quickTerminal/releases/latest)
-2. Unzip and move `quickTerminal.app` to `/Applications/`
+1. Download [`SystemTrayTerminal.zip`](https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest)
+2. Unzip and move `SystemTrayTerminal.app` to `/Applications/`
 
 > [!CAUTION]
 > ### macOS Gatekeeper — Important!
 >
-> quickTERMINAL is **not signed** with an Apple Developer certificate.
+> SystemTrayTerminal is **not signed** with an Apple Developer certificate.
 > macOS will block the app on first launch. **Run this command once to fix it:**
 >
 > ```bash
-> xattr -cr /Applications/quickTerminal.app
+> xattr -cr /Applications/SystemTrayTerminal.app
 > ```
 >
 > **Or use the included installer:**
@@ -54,17 +54,17 @@
 > This removes the macOS quarantine flag and is completely safe.
 > You only need to do this **once** after downloading.
 
-3. Launch — quickTERMINAL appears in your **menu bar** (no dock icon)
+3. Launch — SystemTrayTerminal appears in your **menu bar** (no dock icon)
 4. Press <kbd>Ctrl</kbd> + <kbd><</kbd> to toggle the terminal
 
 <br>
 
 ---
 
-## Why quickTERMINAL?
+## Why SystemTrayTerminal?
 
 > [!IMPORTANT]
-> **17,000+ lines. One file. 4.8 MB app. Full terminal emulation.**
+> **17,700+ lines. One file. 4.8 MB app. Full terminal emulation + built-in text editor.**
 >
 > No Electron. No WebView. No libvte. No SwiftTerm.
 > Written from scratch with a hand-rolled VT parser, direct PTY management,
@@ -104,7 +104,7 @@
 ### Terminal Emulation
 
 > [!NOTE]
-> quickTERMINAL implements a complete VT100/VT220/xterm-compatible terminal from scratch.
+> SystemTrayTerminal implements a complete VT100/VT220/xterm-compatible terminal from scratch.
 
 | | Feature | Details |
 |:---:|---|---|
@@ -138,15 +138,85 @@
 | :question: | **Mode Query** | DECRQM — query private and ANSI terminal modes |
 | :wheelchair: | **Accessibility** | VoiceOver support — screen reader access to terminal content |
 | :bar_chart: | **Diagnostics** | Built-in performance monitor and parser state viewer |
-| :arrows_counterclockwise: | **Auto-Update** | Built-in update system — checks GitHub Releases every 72h, SHA256-verified download, installs + restarts seamlessly |
-| :octocat: | **Git Integration** | Built-in Git panel — branch, status, diff, commit history with GitHub API support |
-| :bar_chart: | **Claude Code Usage** | Live Claude Code subscription usage in footer — session %, weekly limits, auto-connected |
-| :globe_with_meridians: | **WebPicker** | CDP-based DOM element picker — connect to Chrome, hover-select any element, copies outerHTML to clipboard |
-| :clapper: | **Onboarding Video** | First-launch intro video panel — plays once automatically, never shown again |
-| :lock: | **SSH Manager** | Save SSH profiles (host, user, port, key file), connect with one click in a new tab, delete profiles. Persistent via UserDefaults |
-| :art: | **Color Themes** | 4 terminal color schemes: Dark (default), Light, OLED Black, System (follows macOS appearance automatically) |
-| :earth_americas: | **Follow All Spaces** | Window appears on all macOS Spaces simultaneously — toggle in Settings |
-| :pushpin: | **Tray Detach / Reattach** | Float the terminal freely on desktop with all 8 resize handles. Reattach snaps it back under the tray icon |
+
+<br>
+
+---
+
+### Text Editor
+
+> [!NOTE]
+> SystemTrayTerminal includes a **full text editor** as a tab type — alongside terminal tabs, not as a separate app.
+> Long-press `+` → **Text Editor**, or drag any file from Finder onto the tab bar.
+
+| | Feature | Details |
+|:---:|---|---|
+| :pencil2: | **Syntax Highlighting** | 13 languages auto-detected from extension: JSON, HTML, CSS, JS/TS, XML, Markdown, Shell, Python, YAML, TOML, Swift, SQL, INI/Dockerfile |
+| :eye: | **Live Preview** | HTML, SVG, Markdown, CSV render live in a split pane — updates as you type |
+| :1234: | **Line Numbers** | Custom `LineGutterView` (44 px, pure NSView) — right-aligned numbers synced to scroll, theme-aware colors |
+| :printer: | **Print** | Printer button in footer — dark modal with context-aware options (terminal → HTML, Markdown/HTML/SVG/CSV → formatted or source, others → source); native macOS print dialog |
+| :mag: | **Search & Replace** | `⌘F` find with match highlighting, `⌘H` find & replace |
+| :floppy_disk: | **File Operations** | Open (`⌘O`), Save (`⌘S`), Save As (`⌘⇧S`) with native sheet panels |
+| :warning: | **Unsaved Indicator** | `•` dot prefix in tab name when unsaved; custom dark modal on close |
+| :art: | **Theme Sync** | Editor colors follow the active terminal color theme automatically |
+| :repeat: | **Session Restore** | Open file path and editor mode restored on restart |
+| :file_folder: | **File Drop** | Drag any text file from Finder onto the tab bar — opens in editor |
+| :symbols: | **SF Symbol Buttons** | Open / Save / Save As buttons use SF Symbols — language-independent |
+
+#### Input Modes
+
+| Mode | Activation | Behavior |
+|---|---|---|
+| **NORMAL** | Footer `NORMAL` button | Standard macOS text editing |
+| **NANO** | Footer `NANO` button | `^S` Save · `^X` Close · `^K` Cut line · `^U` Paste — shortcut strip shown at bottom |
+| **VIM** | Footer `VIM` button | Modal editing: `hjkl` navigate · `i/a/o` insert · `dd` delete line · `yy` yank · `p` paste · `0/$` line start/end · `:w/:q/:wq` — status bar shows `── NORMAL ──` / `── INSERT ──` |
+
+#### Live Preview — Supported Formats
+
+| Format | Preview |
+|---|---|
+| `.html` / `.htm` | Full WebKit render, updates on every keystroke |
+| `.svg` | Vector render in split pane |
+| `.md` / `.markdown` | Formatted Markdown with syntax-aware rendering |
+| `.csv` | Tabular grid view with column alignment |
+
+<br>
+
+---
+
+### Window & UI
+
+| | Feature | Details |
+|:---:|---|---|
+| :gem: | **Menu Bar App** | Lives in the tray — no dock icon, instant access |
+| :rocket: | **Global Hotkey** | `Ctrl+<` toggles from anywhere (Carbon API) |
+| :crystal_ball: | **Frosted Glass** | NSVisualEffectView with HUD material + adjustable blur |
+| :arrow_up_small: | **Popover Arrow** | Tracks tray icon position, collision-locked during resize |
+| :card_index_dividers: | **Multi-Tab** | Unlimited tabs with drag-to-reorder and color coding |
+| :straight_ruler: | **Split Panes** | Vertical + Horizontal with draggable divider (15-85%) |
+| :mag: | **quickBAR** | Spotlight-style command bar with 40 commands, inline input prompts, and letterpress label |
+| :gear: | **Settings Overlay** | Inline preferences with sliders, toggles, themes |
+| :floppy_disk: | **Session Restore** | Tabs, shells, splits, directories, editor files + modes restored on restart |
+| :lock: | **Single Instance** | File lock prevents duplicate processes |
+| :pushpin: | **Always on Top** | Pin window above all others |
+| :low_brightness: | **Auto-Dim** | Dims window when unfocused (off by default) |
+| :electric_plug: | **Auto-Start** | Launch at login via LaunchAgent |
+| :open_file_folder: | **Drag & Drop** | Drag files/images into terminal — pastes shell-escaped path |
+| :label: | **Custom Tab Names** | Double-click any tab to rename — custom names persist across sessions |
+| :triangular_ruler: | **Window Size Memory** | Last window size saved and restored on next launch |
+| :computer: | **Always On Screen** | Window is always clamped to visible screen area — never falls off-screen |
+| :arrows_counterclockwise: | **Edge Double-Click** | Double-click any edge to expand in that direction (docked-aware: arrow stays over tray icon) |
+| :octocat: | **Git Panel** | Built-in Git panel with branch, status, diff, and commit history |
+| :bar_chart: | **Claude Code Usage** | Live usage badge in footer — auto-connects to Claude Code, shows session & weekly limits |
+| :shield: | **Crash Reporting** | Automatic crash logs to `~/.systemtrayterminal/crash.log` |
+| :arrows_counterclockwise: | **Auto-Update** | Checks GitHub Releases every 72h, SHA256-verified download, one-click install with progress bar, session-preserving restart |
+| :globe_with_meridians: | **WebPicker** | Floating sidebar for Chrome CDP element picking — connect, select DOM elements, auto-paste HTML |
+| :lock: | **SSH Manager** | Floating sidebar — save SSH profiles, connect with one click in a new tab |
+| :art: | **Color Themes** | 4 terminal themes: Dark, Light, OLED Black, System — System auto-follows macOS appearance |
+| :earth_americas: | **Follow All Spaces** | Window shown on all macOS Spaces, configurable in Settings |
+| :pushpin: | **Detach / Reattach** | Float window freely on desktop with full 8-edge resize; snap back to tray from right-click menu |
+| :clapper: | **Onboarding Video** | First-launch intro video panel — plays once automatically |
+| :globe_with_meridians: | **10 Languages** | Full UI localization: EN, DE, TR, ES, FR, IT, AR, JA, ZH, RU |
 
 <br>
 
@@ -282,42 +352,9 @@ IND  NEL  HTS  RI  DCS  CSI  OSC  ST (8-bit C1)
 
 ---
 
-### Window & UI
-
-| | Feature | Details |
-|:---:|---|---|
-| :gem: | **Menu Bar App** | Lives in the tray — no dock icon, instant access |
-| :rocket: | **Global Hotkey** | `Ctrl+<` toggles from anywhere (Carbon API) |
-| :crystal_ball: | **Frosted Glass** | NSVisualEffectView with HUD material + adjustable blur |
-| :arrow_up_small: | **Popover Arrow** | Tracks tray icon position, collision-locked during resize |
-| :card_index_dividers: | **Multi-Tab** | Unlimited tabs with drag-to-reorder and color coding |
-| :straight_ruler: | **Split Panes** | Vertical + Horizontal with draggable divider (15-85%) |
-| :mag: | **quickBAR** | Spotlight-style command bar with 37 commands, inline input prompts, and letterpress label |
-| :gear: | **Settings Overlay** | Inline preferences with sliders, toggles, themes |
-| :floppy_disk: | **Session Restore** | Tabs, shells, splits, directories restored on restart |
-| :lock: | **Single Instance** | File lock prevents duplicate processes |
-| :pushpin: | **Always on Top** | Pin window above all others |
-| :low_brightness: | **Auto-Dim** | Dims window when unfocused (off by default) |
-| :electric_plug: | **Auto-Start** | Launch at login via LaunchAgent |
-| :open_file_folder: | **Drag & Drop** | Drag files/images into terminal — pastes shell-escaped path |
-| :label: | **Custom Tab Names** | Double-click any tab to rename — custom names persist across sessions |
-| :octocat: | **Git Panel** | Built-in Git panel with branch, status, diff, and commit history |
-| :bar_chart: | **Claude Code Usage** | Live usage badge in footer — auto-connects to Claude Code, shows session & weekly limits |
-| :shield: | **Crash Reporting** | Automatic crash logs to `~/.quickterminal/crash.log` |
-| :arrows_counterclockwise: | **Auto-Update** | Checks GitHub Releases every 72h, SHA256-verified download, one-click install with progress bar, session-preserving restart |
-| :globe_with_meridians: | **WebPicker** | Floating sidebar for Chrome CDP element picking — connect, select DOM elements, auto-paste HTML |
-| :lock: | **SSH Manager** | Floating sidebar — save SSH profiles, connect with one click in a new tab |
-| :art: | **Color Themes** | 4 terminal themes: Dark, Light, OLED Black, System — System auto-follows macOS appearance |
-| :earth_americas: | **Follow All Spaces** | Window shown on all macOS Spaces, configurable in Settings |
-| :pushpin: | **Detach / Reattach** | Float window freely on desktop with full 8-edge resize; snap back to tray from right-click menu |
-
-<br>
-
----
-
 ## Shells
 
-quickTERMINAL auto-discovers available shells and lets you switch instantly:
+SystemTrayTerminal auto-discovers available shells and lets you switch instantly:
 
 <table>
 <tr>
@@ -334,7 +371,7 @@ quickTERMINAL auto-discovers available shells and lets you switch instantly:
 
 Each shell gets:
 - Custom `ZDOTDIR` with syntax highlighting + prompt themes
-- Per-tab history files (`~/.quickterminal/history/{tabId}`)
+- Per-tab history files (`~/.systemtrayterminal/history/{tabId}`)
 - Full environment: `TERM=xterm-256color`, `COLORTERM=truecolor`
 
 </td>
@@ -366,7 +403,8 @@ Each shell gets:
 | Shortcut | Action |
 |:---|---|
 | <kbd>Ctrl</kbd> + <kbd><</kbd> | Toggle window visibility (global) |
-| <kbd>⌘</kbd> <kbd>T</kbd> | New tab |
+| <kbd>⌘</kbd> <kbd>T</kbd> | New terminal tab |
+| <kbd>⌘</kbd> <kbd>E</kbd> | New text editor tab |
 | <kbd>⌘</kbd> <kbd>W</kbd> | Close tab |
 | <kbd>⌘</kbd> <kbd>←</kbd> / <kbd>→</kbd> | Switch tabs |
 | <kbd>Ctrl</kbd> + <kbd>1</kbd>–<kbd>9</kbd> | Switch to tab 1–9 directly |
@@ -379,6 +417,16 @@ Each shell gets:
 | <kbd>⌘</kbd> <kbd>V</kbd> | Paste |
 | <kbd>⌘</kbd> <kbd>A</kbd> | Select all |
 | Double-tap <kbd>Ctrl</kbd> | quickBAR |
+
+### Text Editor
+
+| Shortcut | Action |
+|:---|---|
+| <kbd>⌘</kbd> <kbd>O</kbd> | Open file |
+| <kbd>⌘</kbd> <kbd>S</kbd> | Save file |
+| <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>S</kbd> | Save As |
+| <kbd>⌘</kbd> <kbd>F</kbd> | Find in file |
+| <kbd>⌘</kbd> <kbd>H</kbd> | Find & Replace |
 
 ### Window Size Presets
 
@@ -426,8 +474,9 @@ Each shell gets:
 
 | Command | Shortcut | Action |
 |---|:---:|---|
-| **Quit** | `q` | Exit quickTERMINAL |
+| **Quit** | `q` | Exit SystemTrayTerminal |
 | **New Tab** | `⌘T` | Open new terminal tab |
+| **New Editor** | `⌘E` | Open new text editor tab |
 | **Close Tab** | `⌘W` | Close current tab |
 | **Clear** | `⌘K` | Clear terminal scrollback |
 | **Hide** | `Ctrl+<` | Hide window |
@@ -444,7 +493,7 @@ Each shell gets:
 | **Vertical** | Toggle full height (keep width) |
 | **Left** | Snap to top-left quadrant |
 | **Right** | Snap to top-right quadrant |
-| **Defaultsize** | Reset to 720×480 |
+| **Defaultsize** | Reset to 860×480 |
 | **Reset Window** | Reset to default size + position |
 
 ### Split Panes
@@ -542,6 +591,8 @@ Each shell gets:
 | Cursor Style | Underline / Beam / Block | Underline |
 | Syntax Highlighting | On/Off | On |
 | Prompt Theme | 7 themes | default |
+| **Editor** | | |
+| Editor uses Tabs | On/Off | Off |
 | **Window** | | |
 | Always on Top | On/Off | On |
 | Auto-Dim | On/Off | Off |
@@ -564,19 +615,19 @@ Each shell gets:
 ## Architecture
 
 ```
-quickTerminal.app (4.8 MB)
+SystemTrayTerminal.app (4.8 MB)
 ├── Contents/
 │   ├── MacOS/
-│   │   ├── quickTerminal ·········· 1.3 MB binary (JetBrains + Monocraft embedded)
+│   │   ├── SystemTrayTerminal ·········· 1.3 MB binary (JetBrains + Monocraft embedded)
 │   │   ├── _FiraCode-*-terminal.ttf  48 KB each
 │   │   ├── _IosevkaThin-terminal.ttf 40 KB
 │   │   └── shell/ ················· configs, themes, syntax highlighting
 │   ├── Resources/
 │   │   ├── AppIcon.icns ··········· app icon (16px–1024px)
-│   │   └── quickTERMINAL.mp4 ·· Onboarding video (first-launch, plays once)
+│   │   └── SystemTrayTerminal.mp4 ······ Onboarding video (first-launch, plays once)
 │   └── Info.plist ················· LSUIElement=true (menu bar app)
 
-quickTerminal.swift (single file, ~17000 lines)
+SystemTrayTerminal.swift (single file, ~17,700 lines)
 │
 ├── Terminal ·················· VT parser + state machine + grid
 │   ├── Cell ················· Character + attributes + width + hyperlink
@@ -591,6 +642,16 @@ quickTerminal.swift (single file, ~17000 lines)
 │   ├── Mouse ················ Tracking modes 1000-1006
 │   ├── Keyboard ············· Full key encoding + Kitty protocol
 │   └── Accessibility ········ VoiceOver / screen reader support
+│
+├── EditorView ················ Full text editor tab
+│   ├── SyntaxHighlighter ···· 13-language regex engine, 150ms debounce
+│   ├── EditorTextStorage ···· NSTextStorage subclass with onTextEdited callback
+│   ├── EditorLayoutManager ·· NSLayoutManager subclass for gutter coordination
+│   ├── LineGutterView ······· Line numbers (44 px, pure NSView, no NSRulerView), synced scroll, theme-aware
+│   ├── EditorFooter ········· Mode bar: Nano shortcut strip / Vim mode label
+│   ├── EditorSearchPanel ···· Find & Replace (⌘F / ⌘H)
+│   ├── LivePreviewPane ······ WebKit split pane for HTML/SVG/MD/CSV preview
+│   └── Input Modes ·········· Normal / Nano (^S/^X/^K/^U) / Vim (hjkl, dd, yy, :wq)
 │
 ├── UpdateChecker ············· Auto-update system
 │   ├── GitHub API ··········· Check releases every 72h
@@ -609,26 +670,28 @@ quickTerminal.swift (single file, ~17000 lines)
 │   └── AIUsageBadge ········· Color-coded footer badge with detail popover
 │
 ├── AppDelegate ··············· Window, tabs, splits, settings
-│   ├── BorderlessWindow ····· Custom shape + popover arrow
-│   ├── HeaderBarView ········ Tab bar + add button
-│   ├── FooterBarView ········ Shell buttons + git branch + badges
+│   ├── BorderlessWindow ····· Custom shape + popover arrow + 8-edge resize
+│   ├── HeaderBarView ········ Tab bar + SF Symbol editor buttons (Open/Save/Save As)
+│   ├── FooterBarView ········ Shell buttons + git branch + editor mode selector
 │   ├── SettingsOverlay ······ Preferences UI
 │   ├── CommandPaletteView ··· quickBAR — 40 commands with inline prompts
+│   ├── UnsavedAlertView ····· Custom dark modal overlay (dim + warn icon + hover buttons)
+│   ├── PrintModal ··········· Dark print-options panel — context-aware (terminal/editor), lazy HTML, native print dialog
 │   ├── HelpViewer ··········· Cinema-scroll markdown viewer
 │   ├── DiagnosticsOverlay ··· Performance monitor + parser state viewer
 │   ├── SplitContainer ······· Vertical/horizontal split panes
 │   └── Scrollback Search ···· Full-text search with match highlighting
 │
-├── WebPickerSidebarView ·· Chrome CDP element picker with connect/disconnect
-├── ChromeCDPClient ········ WebSocket CDP client for Chrome DevTools Protocol
-├── SSHManagerView ·········· SSH profile sidebar — save, connect, delete SSH profiles
-├── SSHProfile ·············· Codable model: label, user, host, port, keyFile, connectCommand
-└── OnboardingPanel ········ First-launch video panel (plays once, AVKit)
-│
-└── Build Pipeline
-    bash build.sh     → quickTerminal binary (local testing)
-    bash build_app.sh → quickTerminal.app (4.8 MB bundle)
-    bash build_zip.sh → quickTerminal.zip (GitHub Release)
+├── WebPickerSidebarView ······ Chrome CDP element picker with connect/disconnect
+├── ChromeCDPClient ··········· WebSocket CDP client for Chrome DevTools Protocol
+├── SSHManagerView ············ SSH profile sidebar — save, connect, delete SSH profiles
+├── SSHProfile ················ Codable model: label, user, host, port, keyFile, connectCommand
+└── OnboardingPanel ··········· First-launch video panel (plays once, AVKit)
+
+Build Pipeline
+    bash build.sh     → SystemTrayTerminal binary (local testing)
+    bash build_app.sh → SystemTrayTerminal.app (4.8 MB bundle)
+    bash build_zip.sh → SystemTrayTerminal.zip (GitHub Release)
 ```
 
 > [!IMPORTANT]
@@ -644,11 +707,11 @@ quickTerminal.swift (single file, ~17000 lines)
 ```bash
 # 1. Local testing
 bash build.sh
-./quickTerminal
+./SystemTrayTerminal
 
 # 2. App bundle (icon, fonts, shell configs)
 bash build_app.sh
-open quickTerminal.app
+open SystemTrayTerminal.app
 
 # 3. GitHub Release package (.app + install.sh + FIRST_READ.txt + LICENSE + README)
 bash build_zip.sh
@@ -683,14 +746,14 @@ The `.app` bundle (4.8 MB) includes everything — binary, icon, 4 terminal-opti
 
 ## Open Source
 
-quickTERMINAL is source-available with a dual license:
+SystemTrayTerminal is source-available with a dual license:
 
 - **Personal & non-commercial use** — free and open
 - **Commercial use** — requires a paid license
 
 See [LICENSE](./LICENSE) for details. Contact: **l.ersen@icloud.com**
 
-> **17,000+ lines of Swift. One file. Zero dependencies. 4.8 MB app. Full VT emulation + SSH Manager + SHA256-verified auto-updater.**
+> **17,700+ lines of Swift. One file. Zero dependencies. 4.8 MB app. Full VT emulation + Text Editor + SSH Manager + SHA256-verified auto-updater.**
 
 ### Contributing
 
@@ -721,11 +784,11 @@ This project follows [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
 <div align="center">
 
-<img src="icon.png" width="64" alt="quickTERMINAL">
+<img src="icon.png" width="64" alt="SystemTrayTerminal">
 
-### quickTERMINAL v1.4.0
+### SystemTrayTerminal v1.5.0
 
-*17,000+ lines. One file. Zero dependencies. SSH Manager. Git panel. Color Themes. SHA256-verified auto-updater.*
+*17,700+ lines. One file. Zero dependencies. Text Editor with Live Preview. SSH Manager. Git panel. Color Themes. SHA256-verified auto-updater.*
 
 *Built with obsessive attention to every escape sequence, every pixel, every frame.*
 

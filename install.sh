@@ -1,8 +1,8 @@
 #!/bin/bash
-# quickTERMINAL Installer
+# SystemTrayTerminal Installer
 set -e
 
-APP="quickTerminal.app"
+APP="SystemTrayTerminal.app"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_PATH="${SCRIPT_DIR}/${APP}"
 
@@ -11,7 +11,7 @@ if [ ! -d "$APP_PATH" ]; then
     exit 1
 fi
 
-echo "=== quickTERMINAL Installer ==="
+echo "=== SystemTrayTerminal Installer ==="
 echo ""
 echo "Removing quarantine flag..."
 xattr -cr "$APP_PATH"

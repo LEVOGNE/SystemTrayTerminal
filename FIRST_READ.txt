@@ -1,5 +1,5 @@
 ╔══════════════════════════════════════════════════════════════╗
-║                      quickTERMINAL                           ║
+║                    SystemTrayTerminal                        ║
 ║              A blazing-fast terminal for macOS               ║
 ╚══════════════════════════════════════════════════════════════╝
 
@@ -8,7 +8,7 @@
   ════════════════
 
   macOS blocks apps from unidentified developers by default.
-  quickTERMINAL is not signed with an Apple Developer certificate,
+  SystemTrayTerminal is not signed with an Apple Developer certificate,
   so you need to remove the quarantine flag ONCE before launching.
 
 
@@ -20,7 +20,7 @@
       bash install.sh
 
   This removes the quarantine flag, optionally copies the app
-  to /Applications, and launches quickTERMINAL.
+  to /Applications, and launches SystemTrayTerminal.
 
 
   OPTION 2 — Do it manually
@@ -28,9 +28,9 @@
 
   Open Terminal.app and run:
 
-      xattr -cr quickTerminal.app
+      xattr -cr SystemTrayTerminal.app
 
-  Then double-click quickTerminal.app to launch.
+  Then double-click SystemTrayTerminal.app to launch.
 
 
   WHAT DOES xattr -cr DO?
@@ -45,7 +45,7 @@
   AFTER FIRST LAUNCH
   ──────────────────
 
-  quickTERMINAL lives in your menu bar (no dock icon).
+  SystemTrayTerminal lives in your menu bar (no dock icon).
   Press Ctrl + < to toggle the terminal window.
   Double-tap Ctrl to open the quickBAR command palette.
 
@@ -53,7 +53,7 @@
   UPDATES
   ───────
 
-  quickTERMINAL checks for updates automatically every 72 hours.
+  SystemTrayTerminal checks for updates automatically every 72 hours.
   You can also check manually via quickBAR → "Check for Updates".
   Updates preserve all your tabs, splits, settings, and working directories.
 
@@ -61,7 +61,7 @@
   MORE INFO
   ─────────
 
-  GitHub:   https://github.com/LEVOGNE/quickTerminal
+  GitHub:   https://github.com/LEVOGNE/SystemTrayTerminal
   License:  Free for personal use, commercial license required for businesses
             See LICENSE file for details
   Author:   LEVOGNE — Levent Ersen (l.ersen@icloud.com)

@@ -13,7 +13,7 @@
 
 **quickBAR Command Reference**
 
-*Your complete guide to every command in quickTERMINAL's command bar.*
+*Your complete guide to every command in SystemTrayTerminal's command bar.*
 
 <br>
 
@@ -51,7 +51,7 @@
 | :gear: | **Settings** | — | Open preferences overlay |
 | :question: | **Help** | <kbd>?</kbd> | Open the README viewer |
 | :clipboard: | **Commands** | — | Show this reference |
-| :stop_button: | **Quit** | <kbd>q</kbd> | Exit quickTERMINAL |
+| :stop_button: | **Quit** | <kbd>q</kbd> | Exit SystemTrayTerminal |
 
 ### :straight_ruler: Split Panes
 
@@ -189,7 +189,7 @@
 ## :keyboard: Keyboard Shortcuts
 
 > [!IMPORTANT]
-> These shortcuts work globally in quickTERMINAL.
+> These shortcuts work globally in SystemTrayTerminal.
 
 ---
 
@@ -254,7 +254,7 @@
 ### :rocket: Shell Switching
 
 > [!TIP]
-> quickTERMINAL auto-discovers installed shells at startup.
+> SystemTrayTerminal auto-discovers installed shells at startup.
 > Switch instantly without leaving your workflow.
 
 | Shortcut | Shell | Icon |
@@ -367,7 +367,7 @@
 
 ![Built with Swift](https://img.shields.io/badge/Built_with-Swift-F05138?style=flat-square&logo=swift&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-macOS-000000?style=flat-square&logo=apple&logoColor=white)
-![quickTERMINAL](https://img.shields.io/badge/quickTERMINAL-v1.4.0-blue?style=flat-square)
+![SystemTrayTerminal](https://img.shields.io/badge/SystemTrayTerminal-v1.5.0-blue?style=flat-square)
 ![Lines](https://img.shields.io/badge/17000%2B_Lines-One_File-blue?style=flat-square)
 ![App](https://img.shields.io/badge/App-4.8_MB-brightgreen?style=flat-square)
 

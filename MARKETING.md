@@ -1,4 +1,4 @@
-# Marketing Posts für quickTERMINAL
+# Marketing Posts für SystemTrayTerminal
 > Copy-paste ready. Einfach den Text kopieren und posten.
 
 ---
@@ -7,7 +7,7 @@
 
 **Title:**
 ```
-Show HN: quickTERMINAL – A 10k-line single-file terminal emulator for macOS
+Show HN: SystemTrayTerminal – A 10k-line single-file terminal emulator for macOS
 ```
 
 **Text (optional, als erster Kommentar):**
@@ -31,7 +31,7 @@ No SwiftTerm, no libvte, no terminal library. Every escape sequence parsed from 
 
 The whole thing compiles with a single `swiftc` call.
 
-https://github.com/LEVOGNE/quickTerminal
+https://github.com/LEVOGNE/SystemTrayTerminal
 ```
 
 **Post here:** https://news.ycombinator.com/submit
@@ -42,7 +42,7 @@ https://github.com/LEVOGNE/quickTerminal
 
 **Title:**
 ```
-quickTERMINAL — A blazing-fast terminal for macOS, written from scratch in one Swift file (10k lines, zero dependencies, 4.8 MB)
+SystemTrayTerminal — A blazing-fast terminal for macOS, written from scratch in one Swift file (10k lines, zero dependencies, 4.8 MB)
 ```
 
 **Text:**
@@ -65,8 +65,8 @@ What makes it different:
 
 Free for personal use. Source is open on GitHub.
 
-Download: https://github.com/LEVOGNE/quickTerminal/releases/latest
-GitHub: https://github.com/LEVOGNE/quickTerminal
+Download: https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest
+GitHub: https://github.com/LEVOGNE/SystemTrayTerminal
 ```
 
 **Post here:** https://www.reddit.com/r/macapps/submit
@@ -82,7 +82,7 @@ I built a complete terminal emulator in a single Swift file — 10,000+ lines, z
 
 **Text:**
 ```
-Wanted to share a project I've been working on: quickTERMINAL — a fully featured terminal emulator for macOS, written entirely in one Swift file.
+Wanted to share a project I've been working on: SystemTrayTerminal — a fully featured terminal emulator for macOS, written entirely in one Swift file.
 
 Some technical highlights:
 - 13-state finite automaton VT parser — single-pass byte processing
@@ -99,7 +99,7 @@ No SwiftTerm, no libvte — every escape sequence implemented from scratch.
 
 The architecture: Terminal (parser + grid) → TerminalView (NSView + PTY + rendering) → AppDelegate (window, tabs, splits)
 
-GitHub: https://github.com/LEVOGNE/quickTerminal
+GitHub: https://github.com/LEVOGNE/SystemTrayTerminal
 
 Would love feedback from other Swift devs. What would you do differently with a 10k-line single-file project?
 ```
@@ -112,7 +112,7 @@ Would love feedback from other Swift devs. What would you do differently with a 
 
 **Title:**
 ```
-quickTERMINAL: A macOS terminal emulator written from scratch — 10k lines, single file, native rendering
+SystemTrayTerminal: A macOS terminal emulator written from scratch — 10k lines, single file, native rendering
 ```
 
 **Text:**
@@ -132,8 +132,8 @@ Quick facts:
 
 Works great with vim, neovim, tmux, htop, and most TUI apps.
 
-GitHub: https://github.com/LEVOGNE/quickTerminal
-Download: https://github.com/LEVOGNE/quickTerminal/releases/latest
+GitHub: https://github.com/LEVOGNE/SystemTrayTerminal
+Download: https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest
 ```
 
 **Post here:** https://www.reddit.com/r/commandline/submit
@@ -155,7 +155,7 @@ I built a terminal emulator for macOS in ONE Swift file.
 → 24-bit TrueColor + Sixel graphics
 → Lives in your menu bar
 
-github.com/LEVOGNE/quickTerminal
+github.com/LEVOGNE/SystemTrayTerminal
 ```
 
 **Tweet 2:**
@@ -180,7 +180,7 @@ Free for personal use. Source is open.
 
 If you're on macOS and want a fast, lightweight terminal that stays out of your way — give it a try.
 
-Download: github.com/LEVOGNE/quickTerminal/releases/latest
+Download: github.com/LEVOGNE/SystemTrayTerminal/releases/latest
 
 ⭐ Stars appreciated!
 ```
@@ -196,7 +196,7 @@ A 10k-line single-file terminal emulator for macOS
 
 **Description:**
 ```
-quickTERMINAL is a blazing-fast terminal emulator for macOS, written entirely from scratch in one Swift file.
+SystemTrayTerminal is a blazing-fast terminal emulator for macOS, written entirely from scratch in one Swift file.
 
 🚀 13,000+ lines of pure Swift — zero external dependencies
 ⚡ Native Cocoa rendering at 60 FPS

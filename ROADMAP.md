@@ -1,4 +1,4 @@
-# quickTERMINAL Roadmap
+# SystemTrayTerminal Roadmap
 
 This roadmap reflects current priorities and may change.
 
