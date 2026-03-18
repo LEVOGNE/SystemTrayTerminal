@@ -4777,10 +4777,12 @@ class BorderlessWindow: NSWindow {
                 target.size.width = vis.width / 2
                 target.size.height = vis.height
             } else {
-                // Docked: right edge = arrow right edge (trayX + arrowW/2), expand left+down.
+                // Docked: right edge = arrow right edge (trayX + pad), expand left+down.
+                // pad matches the clamp in updateWindowMask: cornerRadius(12) + arrowW/2(10) + 2 = 24
                 // Arrow stays over the tray icon because the mask always recalculates ax.
                 let trayX = trayIconScreenX()
-                let newRight = trayX + arrowHalfW()
+                let arrowPad: CGFloat = 12 + arrowHalfW() + 2  // = 24
+                let newRight = trayX + arrowPad
                 target.origin.x = vis.origin.x
                 target.size.width = newRight - vis.origin.x
                 target.origin.y = vis.origin.y
@@ -4794,10 +4796,12 @@ class BorderlessWindow: NSWindow {
                 target.size.width = vis.width / 2
                 target.size.height = vis.height
             } else {
-                // Docked: left edge = arrow left edge (trayX - arrowW/2), expand right+down.
+                // Docked: left edge = arrow left edge (trayX - pad), expand right+down.
+                // pad matches the clamp in updateWindowMask: cornerRadius(12) + arrowW/2(10) + 2 = 24
                 // Arrow stays over the tray icon because the mask always recalculates ax.
                 let trayX = trayIconScreenX()
-                let newLeft = trayX - arrowHalfW()
+                let arrowPad: CGFloat = 12 + arrowHalfW() + 2  // = 24
+                let newLeft = trayX - arrowPad
                 target.origin.x = newLeft
                 target.size.width = vis.maxX - newLeft
                 target.origin.y = vis.origin.y
@@ -18879,7 +18883,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let screenRect = buttonWindow.convertToScreen(buttonRect)
             let calculatedY = round(screenRect.minY - 4 - wSize.height)
             if calculatedY > 0 {
-                realPosition = (y: calculatedY, midX: round(screenRect.midX))
+                realPosition = (y: calculatedY, midX: screenRect.midX)
             }
         }
 
