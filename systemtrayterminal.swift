@@ -4726,6 +4726,19 @@ class BorderlessWindow: NSWindow {
         return .none
     }
 
+    private func trayIconScreenX() -> CGFloat {
+        guard let delegate = NSApp.delegate as? AppDelegate,
+              let button = delegate.statusItem.button,
+              let btnWindow = button.window else { return frame.midX }
+        let btnRect = button.convert(button.bounds, to: nil)
+        let sx = btnWindow.convertToScreen(btnRect).midX
+        return sx > 100 ? sx : frame.midX
+    }
+
+    private func arrowHalfW() -> CGFloat {
+        ((NSApp.delegate as? AppDelegate)?.arrowW ?? 20) / 2
+    }
+
     private func toggleMaximize(edge: Edge) {
         guard let screen = screen ?? NSScreen.main else { return }
         let vis = screen.visibleFrame  // excludes menu bar & dock
@@ -4764,13 +4777,14 @@ class BorderlessWindow: NSWindow {
                 target.size.width = vis.width / 2
                 target.size.height = vis.height
             } else {
-                // Docked: expand width to the left, keep right edge + arrow fixed.
-                // The arrow is anchored to the tray icon via (trayScreenX - window.origin.x),
-                // so fixing the right edge keeps the arrow in place.
-                let rightEdge = frame.maxX
+                // Docked: right edge = arrow right edge (trayX + arrowW/2), expand left+down.
+                // Arrow stays over the tray icon because the mask always recalculates ax.
+                let trayX = trayIconScreenX()
+                let newRight = trayX + arrowHalfW()
                 target.origin.x = vis.origin.x
-                target.size.width = min(rightEdge - vis.origin.x, vis.width)
-                // Y and height unchanged — user asked for wider, not taller
+                target.size.width = newRight - vis.origin.x
+                target.origin.y = vis.origin.y
+                target.size.height = frame.maxY - vis.origin.y
             }
         case .right:
             if isDetached {
@@ -4780,10 +4794,14 @@ class BorderlessWindow: NSWindow {
                 target.size.width = vis.width / 2
                 target.size.height = vis.height
             } else {
-                // Docked: expand width to the right, keep left edge fixed
-                let leftEdge = frame.origin.x
-                target.size.width = min(vis.maxX - leftEdge, vis.width)
-                // origin.x, Y and height unchanged
+                // Docked: left edge = arrow left edge (trayX - arrowW/2), expand right+down.
+                // Arrow stays over the tray icon because the mask always recalculates ax.
+                let trayX = trayIconScreenX()
+                let newLeft = trayX - arrowHalfW()
+                target.origin.x = newLeft
+                target.size.width = vis.maxX - newLeft
+                target.origin.y = vis.origin.y
+                target.size.height = frame.maxY - vis.origin.y
             }
         case .top, .topLeft, .topRight, .bottomLeft, .bottomRight, .none:
             // Full screen
@@ -20102,6 +20120,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func windowDidMove(_ notification: Notification) {
+        // Arrow position in mask depends on window.frame.origin.x — update on every move.
+        updateWindowMask()
         guard !isAnimating, window.isVisible, window.alphaValue > 0 else { return }
         windowMoveWorkItem?.cancel()
         let item = DispatchWorkItem { [weak self] in
