@@ -15792,10 +15792,6 @@ class LineGutterView: NSView {
         bgColor.setFill()
         bounds.fill()
 
-        // Right separator (1 px)
-        sepColor.setFill()
-        NSRect(x: bounds.width - 1, y: dirtyRect.minY, width: 1, height: dirtyRect.height).fill()
-
         let str = tv.string as NSString
         let attrs = lineAttrs
 
