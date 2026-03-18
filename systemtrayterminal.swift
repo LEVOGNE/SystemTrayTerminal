@@ -1,5 +1,5 @@
 // systemtrayterminal.swift — SystemTrayTerminal — A native macOS menu bar terminal
-// Build: swiftc -O quickTerminal.swift -o quickTerminal -framework Cocoa
+// Build: swiftc -O systemtrayterminal.swift -o SystemTrayTerminal -framework Cocoa
 
 import Cocoa
 import Carbon
@@ -3155,7 +3155,7 @@ class TerminalView: NSView {
         currentShell = shell
         // Prepare all strings before fork (avoid Swift runtime in child)
         let homeDir = NSHomeDirectory()
-        let histDir = "\(homeDir)/.quickterminal/history"
+        let histDir = "\(homeDir)/.systemtrayterminal/history"
         let histPath = "\(histDir)/\(tabId)"
         let zdotdir = Self.shellConfigDir
         let syntaxHL = UserDefaults.standard.bool(forKey: "syntaxHighlighting")
@@ -8577,7 +8577,7 @@ class SettingsOverlay: NSView {
     private static func setAutoStartLegacy(_ enabled: Bool) {
         let home = NSHomeDirectory()
         let agentDir = "\(home)/Library/LaunchAgents"
-        let plistPath = "\(agentDir)/com.quickterminal.autostart.plist"
+        let plistPath = "\(agentDir)/com.systemtrayterminal.autostart.plist"
 
         if enabled {
             // Create LaunchAgent plist
@@ -8585,7 +8585,7 @@ class SettingsOverlay: NSView {
             let absPath = execPath.hasPrefix("/") ? execPath
                 : FileManager.default.currentDirectoryPath + "/" + execPath
             let plist: [String: Any] = [
-                "Label": "com.quickterminal.autostart",
+                "Label": "com.systemtrayterminal.autostart",
                 "ProgramArguments": [absPath],
                 "RunAtLoad": true,
                 "KeepAlive": false,
@@ -8602,7 +8602,7 @@ class SettingsOverlay: NSView {
 // MARK: - GitHub Auth & API
 
 struct GitHubKeychainStore {
-    private static let service = "com.quickTerminal.github"
+    private static let service = "com.SystemTrayTerminal.github"
 
     static func save(key: String, value: String) {
         delete(key: key)
@@ -14534,7 +14534,7 @@ class UpdateChecker {
     private var progressObservation: NSKeyValueObservation?
 
     func checkForUpdate(completion: @escaping (Result<GitHubRelease?, Error>) -> Void) {
-        let url = URL(string: "https://api.github.com/repos/LEVOGNE/quickTerminal/releases/latest")!
+        let url = URL(string: "https://api.github.com/repos/LEVOGNE/SystemTrayTerminal/releases/latest")!
         var req = URLRequest(url: url)
         req.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
         req.timeoutInterval = 15
@@ -14620,7 +14620,7 @@ class UpdateChecker {
             }
             // Copy to persistent temp location (URLSession tmp file gets deleted)
             let zipPath = FileManager.default.temporaryDirectory
-                .appendingPathComponent("quickTerminal_update_\(UUID().uuidString).zip")
+                .appendingPathComponent("SystemTrayTerminal_update_\(UUID().uuidString).zip")
             do {
                 try? FileManager.default.removeItem(at: zipPath)
                 try FileManager.default.copyItem(at: tmpURL, to: zipPath)
@@ -14679,7 +14679,7 @@ class UpdateChecker {
             DispatchQueue.main.async { completion(result) }
         }
         let fm = FileManager.default
-        let extractDir = fm.temporaryDirectory.appendingPathComponent("quickTerminal_extract_\(UUID().uuidString)")
+        let extractDir = fm.temporaryDirectory.appendingPathComponent("SystemTrayTerminal_extract_\(UUID().uuidString)")
 
         // 1. Extract with ditto
         let dittoProc = Process()
@@ -14707,8 +14707,13 @@ class UpdateChecker {
             return
         }
 
-        // Verify executable exists
-        let execPath = appBundle.appendingPathComponent("Contents/MacOS/quickTerminal")
+        // Read Info.plist once for exec name + bundle ID check
+        let infoPlistURL = appBundle.appendingPathComponent("Contents/Info.plist")
+        let plist = NSDictionary(contentsOf: infoPlistURL)
+
+        // Verify executable exists — name read dynamically from CFBundleExecutable
+        let execName = (plist?["CFBundleExecutable"] as? String) ?? "SystemTrayTerminal"
+        let execPath = appBundle.appendingPathComponent("Contents/MacOS/\(execName)")
         guard fm.isExecutableFile(atPath: execPath.path) else {
             complete(.failure(NSError(domain: "UpdateChecker", code: 5,
                                      userInfo: [NSLocalizedDescriptionKey: "Invalid app bundle — no executable"])))
@@ -14716,16 +14721,18 @@ class UpdateChecker {
             return
         }
 
-        // [P0] Verify bundle identifier matches current app
-        let infoPlistURL = appBundle.appendingPathComponent("Contents/Info.plist")
-        if let plist = NSDictionary(contentsOf: infoPlistURL),
-           let newBundleId = plist["CFBundleIdentifier"] as? String,
+        // [P0] Verify bundle identifier — allow known migration: quickterminal → systemtrayterminal
+        let knownMigration = ("com.l3v0.quickterminal", "com.l3v0.systemtrayterminal")
+        if let newBundleId = plist?["CFBundleIdentifier"] as? String,
            let currentBundleId = Bundle.main.bundleIdentifier,
            !currentBundleId.isEmpty, newBundleId != currentBundleId {
-            complete(.failure(NSError(domain: "UpdateChecker", code: 9,
-                                     userInfo: [NSLocalizedDescriptionKey: "Bundle identifier mismatch — aborting update"])))
-            try? fm.removeItem(at: extractDir)
-            return
+            let isMigration = (currentBundleId == knownMigration.0 && newBundleId == knownMigration.1)
+            if !isMigration {
+                complete(.failure(NSError(domain: "UpdateChecker", code: 9,
+                                         userInfo: [NSLocalizedDescriptionKey: "Bundle identifier mismatch — aborting update"])))
+                try? fm.removeItem(at: extractDir)
+                return
+            }
         }
 
         // 3. Current app path
@@ -14742,7 +14749,7 @@ class UpdateChecker {
         }
 
         // 4. Move old .app to temp (rollback backup)
-        let backupPath = fm.temporaryDirectory.appendingPathComponent("quickTerminal_backup_\(UUID().uuidString).app")
+        let backupPath = fm.temporaryDirectory.appendingPathComponent("SystemTrayTerminal_backup_\(UUID().uuidString).app")
         do {
             try fm.moveItem(at: currentAppURL, to: backupPath)
         } catch {
@@ -14891,7 +14898,7 @@ class OnboardingPanel: NSPanel {
 
     static func showIfNeeded(relativeTo parentWindow: NSWindow? = nil) {
         guard !UserDefaults.standard.bool(forKey: "onboardingVideoShown") else { return }
-        guard let url = Bundle.main.url(forResource: "quickTERMINAL", withExtension: "mp4") else { return }
+        guard let url = Bundle.main.url(forResource: "SystemTrayTerminal", withExtension: "mp4") else { return }
         let panel = OnboardingPanel(url: url, relativeTo: parentWindow)
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -17884,7 +17891,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let home = NSHomeDirectory()
 
             // A) Delete ~/.quickterminal/ directory (shell history files)
-            try? fm.removeItem(atPath: home + "/.quickterminal")
+            try? fm.removeItem(atPath: home + "/.systemtrayterminal")
 
             // B) Remove LaunchAgent via existing abstraction
             SettingsOverlay.setAutoStart(false)
@@ -17905,7 +17912,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let cachesDir = (try? fm.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: false))?.path ?? (home + "/Library/Caches")
             let prefsDir  = home + "/Library/Preferences"
             let toDelete = [
-                cachesDir + "/com.l3v0.quickterminal",   // app cache
+                cachesDir + "/com.l3v0.systemtrayterminal",   // app cache
                 cachesDir + "/quickTerminal",              // standalone-binary cache
                 prefsDir  + "/quickTerminal.plist",        // standalone-binary prefs
             ]
