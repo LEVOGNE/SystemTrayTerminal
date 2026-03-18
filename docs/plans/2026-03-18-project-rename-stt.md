@@ -258,7 +258,7 @@ Neu: `private static let service = "com.SystemTrayTerminal.github"`
 Alt: `let histDir = "\(homeDir)/.quickterminal/history"`
 Neu: `let histDir = "\(homeDir)/.systemtrayterminal/history"`
 
-**Step 4: Update-Installer Temp-Pfade (Zeilen 14623, 14682, 14711, 14745)**
+**Step 4: Update-Installer Temp-Pfade (Zeilen 14623, 14682, 14745)**
 
 Alt: `"quickTerminal_update_\(UUID().uuidString).zip"`
 Neu: `"SystemTrayTerminal_update_\(UUID().uuidString).zip"`
@@ -266,11 +266,68 @@ Neu: `"SystemTrayTerminal_update_\(UUID().uuidString).zip"`
 Alt: `"quickTerminal_extract_\(UUID().uuidString)"`
 Neu: `"SystemTrayTerminal_extract_\(UUID().uuidString)"`
 
-Alt: `appBundle.appendingPathComponent("Contents/MacOS/quickTerminal")`
-Neu: `appBundle.appendingPathComponent("Contents/MacOS/SystemTrayTerminal")`
-
 Alt: `"quickTerminal_backup_\(UUID().uuidString).app"`
 Neu: `"SystemTrayTerminal_backup_\(UUID().uuidString).app"`
+
+**Step 4b: Exec-Pfad dynamisch machen (Zeilen 14711–14717) — KRITISCH für Backward-Compat**
+
+Das ist der Fix der alten `quickTerminal.app` Usern erlaubt auf `SystemTrayTerminal.app` zu updaten.
+Die Info.plist wird ohnehin kurz danach gelesen (Zeile 14720) — wir ziehen das vor:
+
+Alt (Zeilen 14711–14729):
+```swift
+// Verify executable exists
+let execPath = appBundle.appendingPathComponent("Contents/MacOS/quickTerminal")
+guard fm.isExecutableFile(atPath: execPath.path) else {
+    complete(.failure(NSError(domain: "UpdateChecker", code: 5,
+                             userInfo: [NSLocalizedDescriptionKey: "Invalid app bundle — no executable"])))
+    try? fm.removeItem(at: extractDir)
+    return
+}
+
+// [P0] Verify bundle identifier matches current app
+let infoPlistURL = appBundle.appendingPathComponent("Contents/Info.plist")
+if let plist = NSDictionary(contentsOf: infoPlistURL),
+   let newBundleId = plist["CFBundleIdentifier"] as? String,
+   let currentBundleId = Bundle.main.bundleIdentifier,
+   !currentBundleId.isEmpty, newBundleId != currentBundleId {
+    complete(.failure(NSError(domain: "UpdateChecker", code: 9,
+                             userInfo: [NSLocalizedDescriptionKey: "Bundle identifier mismatch — aborting update"])))
+    try? fm.removeItem(at: extractDir)
+    return
+}
+```
+
+Neu:
+```swift
+// Read Info.plist once for exec name + bundle ID check
+let infoPlistURL = appBundle.appendingPathComponent("Contents/Info.plist")
+let plist = NSDictionary(contentsOf: infoPlistURL)
+
+// Verify executable exists — name read dynamically from CFBundleExecutable
+let execName = (plist?["CFBundleExecutable"] as? String) ?? "SystemTrayTerminal"
+let execPath = appBundle.appendingPathComponent("Contents/MacOS/\(execName)")
+guard fm.isExecutableFile(atPath: execPath.path) else {
+    complete(.failure(NSError(domain: "UpdateChecker", code: 5,
+                             userInfo: [NSLocalizedDescriptionKey: "Invalid app bundle — no executable"])))
+    try? fm.removeItem(at: extractDir)
+    return
+}
+
+// [P0] Verify bundle identifier — allow known migration: quickterminal → systemtrayterminal
+let knownMigration = ("com.l3v0.quickterminal", "com.l3v0.systemtrayterminal")
+if let newBundleId = plist?["CFBundleIdentifier"] as? String,
+   let currentBundleId = Bundle.main.bundleIdentifier,
+   !currentBundleId.isEmpty, newBundleId != currentBundleId {
+    let isMigration = (currentBundleId == knownMigration.0 && newBundleId == knownMigration.1)
+    if !isMigration {
+        complete(.failure(NSError(domain: "UpdateChecker", code: 9,
+                                 userInfo: [NSLocalizedDescriptionKey: "Bundle identifier mismatch — aborting update"])))
+        try? fm.removeItem(at: extractDir)
+        return
+    }
+}
+```
 
 **Step 5: GitHub API URL (Zeile 14537)**
 
@@ -527,19 +584,85 @@ bash build.sh
 
 ---
 
-### Task 11: GitHub-Hinweis
+### Task 11: Dual-Repo Setup (Parallel bis v1.6.0)
+
+**Strategie:** Alter `quickTerminal` Repo bleibt live. Neues `SystemTrayTerminal` Repo wird erstellt.
+Beide bekommen denselben Code + dieselben Releases. Nach v1.6.0 wird `quickTerminal` archiviert/gelöscht.
+
+**Warum das funktioniert:**
+- Alte User prüfen `LEVOGNE/quickTerminal` auf Updates → finden neues Release → laden `SystemTrayTerminal.app`
+- Dank der Fixes in Task 5 (dynamischer Exec-Name + Migration-Bundle-ID-Exception) läuft das Update durch
+- Nach dem Update zeigt ihre App auf `LEVOGNE/SystemTrayTerminal` für alle künftigen Updates
+- Alter Repo kann nach v1.6.0 archiviert werden
+
+**Step 1: Neues GitHub-Repo erstellen**
 
 Manuell auf github.com:
+1. `https://github.com/new` → Name: `SystemTrayTerminal` → Create
 
-1. Gehe zu `https://github.com/LEVOGNE/quickTerminal`
-2. Settings → Danger Zone → **Rename repository** → `SystemTrayTerminal`
-3. Danach Remote-URL aktualisieren:
+**Step 2: Zweite Remote hinzufügen**
 
 ```bash
 cd "/Users/l3v0/Desktop/FERTIGE PROJEKTE/SystemTrayTerminal"
-git remote set-url origin https://github.com/LEVOGNE/SystemTrayTerminal.git
-git push origin main
+git remote add stt https://github.com/LEVOGNE/SystemTrayTerminal.git
 ```
+
+Verifizieren:
+```bash
+git remote -v
+```
+Expected:
+```
+origin   https://github.com/LEVOGNE/quickTerminal.git (fetch)
+origin   https://github.com/LEVOGNE/quickTerminal.git (push)
+stt      https://github.com/LEVOGNE/SystemTrayTerminal.git (fetch)
+stt      https://github.com/LEVOGNE/SystemTrayTerminal.git (push)
+```
+
+**Step 3: Erstmalig beide Repos befüllen**
+
+```bash
+git push origin main      # alter quickTerminal Repo
+git push stt main         # neuer SystemTrayTerminal Repo
+```
+
+**Step 4: Push-Script erstellen (für täglichen Workflow)**
+
+Erstelle `push.sh` im Projekt-Root:
+```bash
+#!/bin/bash
+set -e
+echo "Pushing to quickTerminal (legacy)..."
+git push origin main
+echo "Pushing to SystemTrayTerminal (new)..."
+git push stt main
+echo "Done."
+```
+```bash
+chmod +x push.sh
+git add push.sh
+git commit -m "chore: add push.sh for dual-repo workflow"
+```
+
+**Step 5: Releases auf beiden Repos veröffentlichen**
+
+Bei jedem Release:
+```bash
+bash build_zip.sh   # erzeugt SystemTrayTerminal_v1.x.x.zip
+
+# Auf neuem Repo publizieren
+gh release create v1.x.x SystemTrayTerminal_v1.x.x.zip \
+  --title "v1.x.x" --repo LEVOGNE/SystemTrayTerminal
+
+# Auf altem Repo AUCH publizieren (damit alte User das Update finden)
+gh release create v1.x.x SystemTrayTerminal_v1.x.x.zip \
+  --title "v1.x.x" --repo LEVOGNE/quickTerminal
+```
+
+**Ab v1.6.0: Alter Repo archivieren**
+
+Manuell auf github.com:
+1. `https://github.com/LEVOGNE/quickTerminal` → Settings → Archive this repository
 
 ---
 
@@ -549,8 +672,9 @@ git push origin main
 2. `chore: update build scripts for SystemTrayTerminal rename`
 3. `chore: rename quickTERMINAL.mp4 → SystemTrayTerminal.mp4`
 4. `feat: update all in-app display strings for SystemTrayTerminal rename`
-5. `feat: update system identifiers for SystemTrayTerminal (bundle, LaunchAgent, keychain, paths)`
+5. `feat: update system identifiers + backward-compat updater (dynamic exec, migration bundle ID)`
 6. `feat: add legacy data migration quickTerminal → SystemTrayTerminal`
 7. `docs: update install.sh and FIRST_READ.txt for SystemTrayTerminal`
 8. `docs: rename quickTerminal → SystemTrayTerminal throughout all documentation`
-9. *(Directory-Rename ist kein git-commit)*
+9. `chore: add push.sh for dual-repo workflow`
+10. *(Directory-Rename ist kein git-commit)*
