@@ -15890,7 +15890,7 @@ class EditorView: NSView {
         scrollView = NSScrollView(frame: NSRect(x: gutterW, y: modeBarH,
                                                 width: max(0, bounds.width - gutterW),
                                                 height: max(0, bounds.height - modeBarH)))
-        scrollView.autoresizingMask = [.width, .height]
+        scrollView.autoresizingMask = []
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
@@ -15924,15 +15924,11 @@ class EditorView: NSView {
         textView.allowsUndo = true
         textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
 
-        // Use same semi-transparent bg as terminal (kTermBgCGColor) — overridden by applyTheme later
-        let initialBG = NSColor(cgColor: kTermBgCGColor) ?? NSColor(calibratedRed: 0.05, green: 0.05, blue: 0.08, alpha: 0.28)
-        applyColors(bg: initialBG, fg: NSColor(calibratedRed: 0.85, green: 0.85, blue: 0.90, alpha: 1))
-
         scrollView.documentView = textView
 
         // Line number gutter — custom NSView, left of scrollView
         lineGutter = LineGutterView(frame: NSRect(x: 0, y: modeBarH,
-                                                   width: 44,
+                                                   width: gutterW,
                                                    height: max(0, bounds.height - modeBarH)))
         lineGutter.textView   = textView
         lineGutter.scrollView = scrollView
@@ -15950,6 +15946,10 @@ class EditorView: NSView {
                                                queue: .main) { [weak self] _ in
             self?.lineGutter?.needsDisplay = true
         }
+
+        // Use same semi-transparent bg as terminal (kTermBgCGColor) — overridden by applyTheme later
+        let initialBG = NSColor(cgColor: kTermBgCGColor) ?? NSColor(calibratedRed: 0.05, green: 0.05, blue: 0.08, alpha: 0.28)
+        applyColors(bg: initialBG, fg: NSColor(calibratedRed: 0.85, green: 0.85, blue: 0.90, alpha: 1))
 
         // Mode bar (hidden by default — shown for nano/vim)
         modeBar = NSView(frame: NSRect(x: 0, y: 0, width: bounds.width, height: modeBarH))
