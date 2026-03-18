@@ -15862,6 +15862,7 @@ class EditorView: NSView {
 
     private(set) var textView: NSTextView!
     private var scrollView: NSScrollView!
+    private var lineGutter: LineGutterView!
     private var modeBar: NSView!
     private var modeBarLabel: NSTextField!
     private var syntaxStorage: SyntaxTextStorage?
@@ -15885,7 +15886,9 @@ class EditorView: NSView {
 
     private func setup() {
         let modeBarH: CGFloat = 26
-        scrollView = NSScrollView(frame: NSRect(x: 0, y: modeBarH, width: bounds.width,
+        let gutterW: CGFloat = 44
+        scrollView = NSScrollView(frame: NSRect(x: gutterW, y: modeBarH,
+                                                width: max(0, bounds.width - gutterW),
                                                 height: max(0, bounds.height - modeBarH)))
         scrollView.autoresizingMask = [.width, .height]
         scrollView.hasVerticalScroller = true
@@ -15927,6 +15930,27 @@ class EditorView: NSView {
 
         scrollView.documentView = textView
 
+        // Line number gutter — custom NSView, left of scrollView
+        lineGutter = LineGutterView(frame: NSRect(x: 0, y: modeBarH,
+                                                   width: 44,
+                                                   height: max(0, bounds.height - modeBarH)))
+        lineGutter.textView   = textView
+        lineGutter.scrollView = scrollView
+        addSubview(lineGutter)
+
+        // Redraw gutter on text change
+        NotificationCenter.default.addObserver(forName: NSText.didChangeNotification,
+                                               object: textView,
+                                               queue: .main) { [weak self] _ in
+            self?.lineGutter?.needsDisplay = true
+        }
+        // Redraw gutter on scroll
+        NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification,
+                                               object: scrollView.contentView,
+                                               queue: .main) { [weak self] _ in
+            self?.lineGutter?.needsDisplay = true
+        }
+
         // Mode bar (hidden by default — shown for nano/vim)
         modeBar = NSView(frame: NSRect(x: 0, y: 0, width: bounds.width, height: modeBarH))
         modeBar.wantsLayer = true
@@ -15964,6 +15988,7 @@ class EditorView: NSView {
             ? NSColor(calibratedWhite: 0.0, alpha: 0.35).cgColor
             : NSColor(calibratedWhite: 0.0, alpha: 0.12).cgColor
         syntaxStorage?.baseFG = fg
+        lineGutter?.applyColors(isDark: isDark, bg: bg)
     }
 
     func setLanguage(_ lang: SyntaxLanguage) {
@@ -16189,9 +16214,16 @@ class EditorView: NSView {
         super.layout()
         guard let sv = scrollView, let tv = textView, let mb = modeBar else { return }
         let modeBarH: CGFloat = mb.isHidden ? 0 : 26
-        // Resize scrollView: top of view down to above modeBar
-        sv.frame = NSRect(x: 0, y: modeBarH, width: bounds.width,
-                          height: max(0, bounds.height - modeBarH))
+        let gutterW:  CGFloat = 44
+        let availH = max(0, bounds.height - modeBarH)
+
+        // Gutter: left strip
+        lineGutter?.frame = NSRect(x: 0, y: modeBarH, width: gutterW, height: availH)
+
+        // ScrollView: remainder to the right
+        sv.frame = NSRect(x: gutterW, y: modeBarH,
+                          width: max(0, bounds.width - gutterW),
+                          height: availH)
         mb.frame.size.width = bounds.width
         let w = sv.contentSize.width
         tv.frame = NSRect(x: 0, y: 0, width: w,
