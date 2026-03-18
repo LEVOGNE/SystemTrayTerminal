@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build quickTerminal.zip for GitHub Releases
+# Build SystemTrayTerminal_vX.Y.Z.zip for GitHub Releases
 set -e
 cd "$(dirname "$0")"
 
@@ -22,6 +22,10 @@ ditto -ck --sequesterRsrc --keepParent SystemTrayTerminal.app "$ZIP_NAME"
 # (ditto creates a clean zip, we use /usr/bin/zip to append extra files)
 /usr/bin/zip -j "$ZIP_NAME" install.sh FIRST_READ.txt LICENSE README.md
 
+# Generate SHA256 sidecar for updater integrity verification
+SHA256_NAME="${ZIP_NAME}.sha256"
+shasum -a 256 "$ZIP_NAME" | awk '{print $1}' > "$SHA256_NAME"
+
 ZIP_SIZE=$(du -sh "$ZIP_NAME" | cut -f1)
 echo ""
 echo "    ${ZIP_NAME}  →  ${ZIP_SIZE}"
@@ -32,5 +36,7 @@ echo "      FIRST_READ.txt"
 echo "      LICENSE"
 echo "      README.md"
 echo ""
+echo "    SHA256: ${SHA256_NAME}"
+echo ""
 echo "    Ready for GitHub Release v${VERSION}"
-echo "    Upload: gh release create v${VERSION} ${ZIP_NAME} --title \"v${VERSION}\""
+echo "    Upload: gh release create v${VERSION} ${ZIP_NAME} ${SHA256_NAME} --title \"v${VERSION}\""
