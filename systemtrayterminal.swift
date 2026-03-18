@@ -20098,6 +20098,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func showWindowAnimated() {
         guard !isAnimating else { return }
         isAnimating = true
+        // Cancel any pending position-save debounce — the positions set by
+        // positionWindowUnderTrayIcon() below must not overwrite the user's saved position.
+        windowMoveWorkItem?.cancel()
+        windowMoveWorkItem = nil
 
         // Position + mask BEFORE making window invisible and ordering front.
         // Then re-position AFTER ordering to override any macOS screen-constraint
@@ -20115,12 +20119,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // saving, and we override any macOS screen-constraint repositioning cleanly.
         positionWindowUnderTrayIcon()
 
-        // Docked: if user previously moved the window to a custom position, restore it.
-        // (alpha is still 0 here, so windowDidMove guard blocks any accidental save.)
+        // Docked: restore user's custom position if set.
+        // Do NOT clamp to screen — user may intentionally place the window partially
+        // off-screen (e.g. left edge). Only skip if the window would be completely
+        // off all screens (e.g. external monitor was disconnected).
         if !isWindowDetached, let saved = lastDockedFrame {
-            let screen = NSScreen.main ?? NSScreen.screens.first
-            let clamped = clampFrameToScreen(saved, screen: screen)
-            window.setFrameOrigin(clamped.origin)
+            let reachable = NSScreen.screens.contains { $0.visibleFrame.intersects(saved) }
+            if reachable {
+                window.setFrameOrigin(saved.origin)
+            } else {
+                lastDockedFrame = nil   // monitor gone — reset to tray center
+            }
         }
 
         if #available(macOS 14.0, *) { NSApp.activate() }
