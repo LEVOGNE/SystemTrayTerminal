@@ -16618,12 +16618,58 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    private func migrateLegacyData() {
+        let fm = FileManager.default
+        let home = NSHomeDirectory()
+        let oldConfigDir = home + "/.quickterminal"
+        let newConfigDir = home + "/.systemtrayterminal"
+
+        // 1. Migrate config directory
+        if fm.fileExists(atPath: oldConfigDir) && !fm.fileExists(atPath: newConfigDir) {
+            do {
+                try fm.copyItem(atPath: oldConfigDir, toPath: newConfigDir)
+                try fm.removeItem(atPath: oldConfigDir)
+            } catch {
+                // Migration failed — leave old dir intact
+            }
+        }
+
+        // 2. Migrate UserDefaults from old domain to new domain
+        let oldDomain = "com.l3v0.quickterminal"
+        let newDomain = "com.l3v0.systemtrayterminal"
+        let defaults = UserDefaults.standard
+        if let oldPrefs = UserDefaults(suiteName: oldDomain)?.dictionaryRepresentation(),
+           !oldPrefs.isEmpty {
+            let newDefaults = UserDefaults(suiteName: newDomain)
+            for (key, value) in oldPrefs {
+                if newDefaults?.object(forKey: key) == nil {
+                    newDefaults?.set(value, forKey: key)
+                }
+            }
+            newDefaults?.synchronize()
+            defaults.removePersistentDomain(forName: oldDomain)
+        }
+
+        // 3. Migrate LaunchAgent (unload old label, new label registered on next autostart toggle)
+        let agentDir = home + "/Library/LaunchAgents"
+        let oldPlist = agentDir + "/com.quickterminal.autostart.plist"
+        if fm.fileExists(atPath: oldPlist) {
+            let task = Process()
+            task.launchPath = "/bin/launchctl"
+            task.arguments = ["unload", oldPlist]
+            try? task.run()
+            task.waitUntilExit()
+            try? fm.removeItem(atPath: oldPlist)
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // One-time prompt for Full Disk Access
         requestFullDiskAccessIfNeeded()
 
         // Register default settings (single source of truth in SettingsOverlay.defaultSettings)
         UserDefaults.standard.register(defaults: SettingsOverlay.defaultSettings)
+        migrateLegacyData()
 
         // Apply saved color theme
         let savedTheme = UserDefaults.standard.integer(forKey: "colorTheme")
