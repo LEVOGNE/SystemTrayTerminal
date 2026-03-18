@@ -1,8 +1,8 @@
-# Project Rename: quickTerminal → STT Implementation Plan
+# Project Rename: quickTerminal → SystemTrayTerminal Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Vollständiges Rename von quickTerminal zu SYSTEM TRAY TERMINAL (STT) — Dateinamen, Bundle-ID, Config-Pfade, Display-Strings, Build-Scripts, Docs.
+**Goal:** Vollständiges Rename von quickTerminal zu SystemTrayTerminal (Abkürzung: STT) — Dateinamen, Bundle-ID, Config-Pfade, Display-Strings, Build-Scripts, Docs.
 
 **Architecture:** Batch-Ersetzungen in Swift-Datei + Build-Scripts, Migrations-Logik für bestehende Installs, dann Directory-Rename als letzter Schritt.
 
@@ -14,32 +14,34 @@
 
 | Was | Alt | Neu |
 |---|---|---|
-| Source-Datei | `quickTerminal.swift` | `STT.swift` |
-| Binary | `quickTerminal` | `STT` |
-| App-Bundle | `quickTerminal.app` | `STT.app` |
-| Bundle-ID | `com.l3v0.quickterminal` | `com.l3v0.stt` |
-| CFBundleDisplayName | `quickTERMINAL` | `SYSTEM TRAY TERMINAL` |
-| Config-Dir | `~/.quickterminal/` | `~/.stt/` |
-| LaunchAgent Label | `com.quickterminal.autostart` | `com.stt.autostart` |
-| Keychain Service | `com.quickTerminal.github` | `com.stt.github` |
+| Source-Datei | `quickTerminal.swift` | `systemtrayterminal.swift` |
+| Binary | `quickTerminal` | `SystemTrayTerminal` |
+| App-Bundle | `quickTerminal.app` | `SystemTrayTerminal.app` |
+| Bundle-ID | `com.l3v0.quickterminal` | `com.l3v0.systemtrayterminal` |
+| CFBundleName | `quickTerminal` | `SystemTrayTerminal` |
+| CFBundleDisplayName | `quickTERMINAL` | `SystemTrayTerminal` |
+| Config-Dir | `~/.quickterminal/` | `~/.systemtrayterminal/` |
+| LaunchAgent Label | `com.quickterminal.autostart` | `com.systemtrayterminal.autostart` |
+| Keychain Service | `com.quickTerminal.github` | `com.SystemTrayTerminal.github` |
 | Footer-Text | `quickTERMINAL v…` | `STT v…` |
-| Settings-Titel | `quickTERMINAL` | `SYSTEM TRAY TERMINAL` |
-| About-Badge | `quickTERMINAL` | `STT` |
-| Onboarding-Video | `quickTERMINAL.mp4` | `STT.mp4` |
-| Projekt-Verzeichnis | `quickTerminal/` | `STT/` |
+| About-Titel / Badge | `quickTERMINAL` | `SystemTrayTerminal` |
+| Settings-Titel | `quickTERMINAL` | `SystemTrayTerminal` |
+| Menü-Items | `About/Quit quickTerminal` | `About/Quit SystemTrayTerminal` |
+| Onboarding-Video | `quickTERMINAL.mp4` | `SystemTrayTerminal.mp4` |
+| Projekt-Verzeichnis | `quickTerminal/` | `SystemTrayTerminal/` |
 
 ---
 
 ### Task 1: git mv Source-Datei
 
 **Files:**
-- Rename: `quickTerminal.swift` → `STT.swift`
+- Rename: `quickTerminal.swift` → `systemtrayterminal.swift`
 
 **Step 1: Datei umbenennen mit git**
 
 ```bash
 cd "/Users/l3v0/Desktop/FERTIGE PROJEKTE/quickTerminal"
-git mv quickTerminal.swift STT.swift
+git mv quickTerminal.swift systemtrayterminal.swift
 ```
 
 **Step 2: Verifizieren**
@@ -47,12 +49,12 @@ git mv quickTerminal.swift STT.swift
 ```bash
 git status
 ```
-Expected: `renamed: quickTerminal.swift -> STT.swift`
+Expected: `renamed: quickTerminal.swift -> systemtrayterminal.swift`
 
 **Step 3: Commit**
 
 ```bash
-git commit -m "chore: rename quickTerminal.swift → STT.swift"
+git commit -m "chore: rename quickTerminal.swift → systemtrayterminal.swift"
 ```
 
 ---
@@ -64,23 +66,21 @@ git commit -m "chore: rename quickTerminal.swift → STT.swift"
 - Modify: `build_app.sh`
 - Modify: `build_zip.sh`
 
-**Step 1: `build.sh` komplett neu schreiben**
-
-Ersetze den Inhalt von `build.sh`:
+**Step 1: `build.sh` komplett ersetzen**
 
 ```bash
 #!/bin/bash
 set -e
 cd "$(dirname "$0")"
 
-echo "Building STT..."
-swiftc -O STT.swift -o STT -framework Cocoa -framework Carbon -framework AVKit -framework WebKit \
+echo "Building SystemTrayTerminal..."
+swiftc -O systemtrayterminal.swift -o SystemTrayTerminal -framework Cocoa -framework Carbon -framework AVKit -framework WebKit \
   -Xlinker -sectcreate -Xlinker __FONTS -Xlinker __jbmono -Xlinker _JetBrainsMono-LightItalic-terminal.ttf \
   -Xlinker -sectcreate -Xlinker __FONTS -Xlinker __monocraft -Xlinker _Monocraft-terminal.ttf \
   -Xlinker -sectcreate -Xlinker __DATA -Xlinker __readme -Xlinker README.md \
   -Xlinker -sectcreate -Xlinker __DATA -Xlinker __commands -Xlinker COMMANDS.md \
   -Xlinker -sectcreate -Xlinker __DATA -Xlinker __changelog -Xlinker CHANGELOG.md
-echo "Done! Run with: ./STT"
+echo "Done! Run with: ./SystemTrayTerminal"
 
 echo ""
 echo "Running tests..."
@@ -88,30 +88,30 @@ swift tests.swift
 echo ""
 ```
 
-**Step 2: `build_app.sh` — 5 Ersetzungen**
+**Step 2: `build_app.sh` — Ersetzungen**
 
-1. Zeile 5: `APP_NAME="quickTerminal"` → `APP_NAME="STT"`
-2. Zeile 8: `BUNDLE_ID="com.l3v0.quickterminal"` → `BUNDLE_ID="com.l3v0.stt"`
-3. Zeile 11: `quickTerminal.swift` → `STT.swift` (VERSION extraction sed)
-4. Zeile 12: Error-Msg `quickTerminal.swift` → `STT.swift`
-5. Zeile 40: `swiftc -O quickTerminal.swift` → `swiftc -O STT.swift`
-6. Zeile 72: `cp quickTERMINAL.mp4` → `cp STT.mp4`
-7. Zeile 86: `<string>quickTERMINAL</string>` (CFBundleDisplayName) → `<string>SYSTEM TRAY TERMINAL</string>`
-8. Zeile 112: `quickTERMINAL needs accessibility...` → `STT needs accessibility...`
+1. Zeile 5: `APP_NAME="quickTerminal"` → `APP_NAME="SystemTrayTerminal"`
+2. Zeile 8: `BUNDLE_ID="com.l3v0.quickterminal"` → `BUNDLE_ID="com.l3v0.systemtrayterminal"`
+3. Zeile 11: `quickTerminal.swift` → `systemtrayterminal.swift` (VERSION extraction sed)
+4. Zeile 12: Error-Msg `quickTerminal.swift` → `systemtrayterminal.swift`
+5. Zeile 40: `swiftc -O quickTerminal.swift` → `swiftc -O systemtrayterminal.swift`
+6. Zeile 72: `cp quickTERMINAL.mp4` → `cp SystemTrayTerminal.mp4`
+7. Zeile 86: `<string>quickTERMINAL</string>` (CFBundleDisplayName) → `<string>SystemTrayTerminal</string>`
+8. Zeile 112: `quickTERMINAL needs accessibility...` → `SystemTrayTerminal needs accessibility...`
 
-**Step 3: `build_zip.sh` — 3 Ersetzungen**
+**Step 3: `build_zip.sh` — Ersetzungen**
 
-1. Zeile 6: `quickTerminal.swift` → `STT.swift`
-2. Zeile 7: Error-Msg `quickTerminal.swift` → `STT.swift`
-3. Zeile 8: `ZIP_NAME="quickTERMINAL_v${VERSION}.zip"` → `ZIP_NAME="STT_v${VERSION}.zip"`
-4. Zeile 19: `ditto -ck ... quickTerminal.app` → `STT.app`
-5. Zeilen 29: Echo `quickTerminal.app` → `STT.app`
+1. Zeile 6: `quickTerminal.swift` → `systemtrayterminal.swift`
+2. Zeile 7: Error-Msg `quickTerminal.swift` → `systemtrayterminal.swift`
+3. Zeile 8: `ZIP_NAME="quickTERMINAL_v${VERSION}.zip"` → `ZIP_NAME="SystemTrayTerminal_v${VERSION}.zip"`
+4. Zeile 19: `ditto -ck ... quickTerminal.app` → `SystemTrayTerminal.app`
+5. Zeile 29: Echo `quickTerminal.app` → `SystemTrayTerminal.app`
 
 **Step 4: Commit**
 
 ```bash
 git add build.sh build_app.sh build_zip.sh
-git commit -m "chore: update build scripts for STT rename"
+git commit -m "chore: update build scripts for SystemTrayTerminal rename"
 ```
 
 ---
@@ -119,40 +119,32 @@ git commit -m "chore: update build scripts for STT rename"
 ### Task 3: Onboarding-Video umbenennen
 
 **Files:**
-- Rename: `quickTERMINAL.mp4` → `STT.mp4`
+- Rename: `quickTERMINAL.mp4` → `SystemTrayTerminal.mp4`
 
 **Step 1: Datei umbenennen**
 
 ```bash
 cd "/Users/l3v0/Desktop/FERTIGE PROJEKTE/quickTerminal"
-git mv quickTERMINAL.mp4 STT.mp4
+git mv quickTERMINAL.mp4 SystemTrayTerminal.mp4
 ```
 
-**Step 2: Verifizieren**
+**Step 2: Commit**
 
 ```bash
-ls STT.mp4
-```
-
-**Step 3: Commit**
-
-```bash
-git commit -m "chore: rename quickTERMINAL.mp4 → STT.mp4"
+git commit -m "chore: rename quickTERMINAL.mp4 → SystemTrayTerminal.mp4"
 ```
 
 ---
 
-### Task 4: In-App Display-Strings in STT.swift
+### Task 4: In-App Display-Strings in systemtrayterminal.swift
 
 **Files:**
-- Modify: `STT.swift`
-
-Ziel: Alle Stellen ersetzen, die dem User angezeigt werden.
+- Modify: `systemtrayterminal.swift`
 
 **Step 1: Datei-Header (Zeile 1)**
 
 Alt: `// quickTerminal.swift — A simple native terminal emulator for macOS`
-Neu: `// STT.swift — SYSTEM TRAY TERMINAL — A native terminal emulator for macOS`
+Neu: `// systemtrayterminal.swift — SystemTrayTerminal — A native macOS menu bar terminal`
 
 **Step 2: Footer-Text (Zeile 4315)**
 
@@ -162,31 +154,30 @@ Neu: `string: "STT v\(kAppVersion) — LEVOGNE © 2026"`
 **Step 3: About-Titel (Zeile 13237)**
 
 Alt: `l.append(StyledLine(text: "quickTERMINAL", style: .title))`
-Neu: `l.append(StyledLine(text: "STT", style: .title))`
+Neu: `l.append(StyledLine(text: "SystemTrayTerminal", style: .title))`
 
 **Step 4: NSMenu-Items (Zeilen 20466, 20468)**
 
-Alt: `"About quickTerminal"`  → Neu: `"About STT"`
-Alt: `"Quit quickTerminal"` → Neu: `"Quit STT"`
+Alt: `"About quickTerminal"` → Neu: `"About SystemTrayTerminal"`
+Alt: `"Quit quickTerminal"` → Neu: `"Quit SystemTrayTerminal"`
 
 **Step 5: fullDiskAccessMsg in allen Sprachen (Zeilen 289, 358, 427, 496, 565, 634, 703, 772, 841, 910)**
 
-Replace all: `quickTERMINAL` in `fullDiskAccessMsg` strings → `STT`
-(Nur in den Localizations-Dicts, nicht in Kommentaren)
+Replace all: `quickTERMINAL` in `fullDiskAccessMsg` strings → `SystemTrayTerminal`
 
 **Step 6: quitApp-Strings in allen Sprachen**
 
 Replace all:
-- `"Quit quickTerminal"` → `"Quit STT"`
-- `"quickTerminal beenden"` → `"STT beenden"`
-- `"quickTerminal'i Kapat"` → `"STT'yi Kapat"`
-- `"Salir de quickTerminal"` → `"Salir de STT"`
-- `"Quitter quickTerminal"` → `"Quitter STT"`
-- `"Esci da quickTerminal"` → `"Esci da STT"`
-- `"إنهاء quickTerminal"` → `"إنهاء STT"`
-- `"quickTerminal を終了"` → `"STT を終了"`
-- `"退出 quickTerminal"` → `"退出 STT"`
-- `"Выйти из quickTerminal"` → `"Выйти из STT"`
+- `"Quit quickTerminal"` → `"Quit SystemTrayTerminal"`
+- `"quickTerminal beenden"` → `"SystemTrayTerminal beenden"`
+- `"quickTerminal'i Kapat"` → `"SystemTrayTerminal'i Kapat"`
+- `"Salir de quickTerminal"` → `"Salir de SystemTrayTerminal"`
+- `"Quitter quickTerminal"` → `"Quitter SystemTrayTerminal"`
+- `"Esci da quickTerminal"` → `"Esci da SystemTrayTerminal"`
+- `"إنهاء quickTerminal"` → `"إنهاء SystemTrayTerminal"`
+- `"quickTerminal を終了"` → `"SystemTrayTerminal を終了"`
+- `"退出 quickTerminal"` → `"退出 SystemTrayTerminal"`
+- `"Выйти из quickTerminal"` → `"Выйти из SystemTrayTerminal"`
 
 **Step 7: Feedback-Email (Zeilen 8002–8004, 8053)**
 
@@ -198,46 +189,51 @@ let email = "From: quickTerminal@\(hostname)\r\n..."
 ```
 Neu:
 ```swift
-let subject = "STT Feedback"
-let hostname = Host.current().localizedName ?? "STT-user"
-let email = "From: STT@\(hostname)\r\n..."
+let subject = "SystemTrayTerminal Feedback"
+let hostname = Host.current().localizedName ?? "SystemTrayTerminal-user"
+let email = "From: SystemTrayTerminal@\(hostname)\r\n..."
 ```
-(Zeile 8053: `let subject = "quickTERMINAL Feedback"` → `"STT Feedback"`)
+(Zeile 8053: `let subject = "quickTERMINAL Feedback"` → `"SystemTrayTerminal Feedback"`)
 
 **Step 8: Device Attribute Response (Zeile 2248)**
 
 Alt: `onResponse?("\u{1B}P>|quickTerminal(1.0)\u{1B}\\")`
-Neu: `onResponse?("\u{1B}P>|STT(1.0)\u{1B}\\")`
+Neu: `onResponse?("\u{1B}P>|SystemTrayTerminal(1.0)\u{1B}\\")`
 
 **Step 9: Crash-Log / Lock-Datei (Zeilen 20403, 20415, 20428, 20441)**
 
 Alt: `let lockPath = NSTemporaryDirectory() + "quickTerminal.lock"`
-Neu: `let lockPath = NSTemporaryDirectory() + "STT.lock"`
+Neu: `let lockPath = NSTemporaryDirectory() + "SystemTrayTerminal.lock"`
 
 Alt (20415, 20428): `NSHomeDirectory() + "/.quickterminal"`
-Neu: `NSHomeDirectory() + "/.stt"`
+Neu: `NSHomeDirectory() + "/.systemtrayterminal"`
 
 Alt (20441): `var msg = "quickTerminal crashed with signal \(sigNum)\n"`
-Neu: `var msg = "STT crashed with signal \(sigNum)\n"`
+Neu: `var msg = "SystemTrayTerminal crashed with signal \(sigNum)\n"`
 
 **Step 10: GitHub Token Description (Zeile 10834)**
 
 Suche: `scopes=repo&description=quickTerminal`
-Neu: `scopes=repo&description=STT`
+Neu: `scopes=repo&description=SystemTrayTerminal`
 
-**Step 11: Commit**
+**Step 11: SVG-Kommentar (Zeile 16636)**
+
+Alt: `// Exact reproduction of quickTERMINAL.svg`
+Neu: `// Exact reproduction of SystemTrayTerminal.svg`
+
+**Step 12: Commit**
 
 ```bash
-git add STT.swift
-git commit -m "feat: update all in-app display strings for STT rename"
+git add systemtrayterminal.swift
+git commit -m "feat: update all in-app display strings for SystemTrayTerminal rename"
 ```
 
 ---
 
-### Task 5: System-Identifiers in STT.swift
+### Task 5: System-Identifiers in systemtrayterminal.swift
 
 **Files:**
-- Modify: `STT.swift`
+- Modify: `systemtrayterminal.swift`
 
 **Step 1: LaunchAgent Label (Zeilen 8580, 8588)**
 
@@ -248,45 +244,45 @@ let plistPath = "\(agentDir)/com.quickterminal.autostart.plist"
 ```
 Neu:
 ```swift
-let plistPath = "\(agentDir)/com.stt.autostart.plist"
-"Label": "com.stt.autostart",
+let plistPath = "\(agentDir)/com.systemtrayterminal.autostart.plist"
+"Label": "com.systemtrayterminal.autostart",
 ```
 
 **Step 2: Keychain Service (Zeile 8605)**
 
 Alt: `private static let service = "com.quickTerminal.github"`
-Neu: `private static let service = "com.stt.github"`
+Neu: `private static let service = "com.SystemTrayTerminal.github"`
 
 **Step 3: Config-Dir (Zeile 3158)**
 
 Alt: `let histDir = "\(homeDir)/.quickterminal/history"`
-Neu: `let histDir = "\(homeDir)/.stt/history"`
+Neu: `let histDir = "\(homeDir)/.systemtrayterminal/history"`
 
 **Step 4: Update-Installer Temp-Pfade (Zeilen 14623, 14682, 14711, 14745)**
 
 Alt: `"quickTerminal_update_\(UUID().uuidString).zip"`
-Neu: `"STT_update_\(UUID().uuidString).zip"`
+Neu: `"SystemTrayTerminal_update_\(UUID().uuidString).zip"`
 
 Alt: `"quickTerminal_extract_\(UUID().uuidString)"`
-Neu: `"STT_extract_\(UUID().uuidString)"`
+Neu: `"SystemTrayTerminal_extract_\(UUID().uuidString)"`
 
 Alt: `appBundle.appendingPathComponent("Contents/MacOS/quickTerminal")`
-Neu: `appBundle.appendingPathComponent("Contents/MacOS/STT")`
+Neu: `appBundle.appendingPathComponent("Contents/MacOS/SystemTrayTerminal")`
 
 Alt: `"quickTerminal_backup_\(UUID().uuidString).app"`
-Neu: `"STT_backup_\(UUID().uuidString).app"`
+Neu: `"SystemTrayTerminal_backup_\(UUID().uuidString).app"`
 
 **Step 5: GitHub API URL (Zeile 14537)**
 
 Alt: `https://api.github.com/repos/LEVOGNE/quickTerminal/releases/latest`
-Neu: `https://api.github.com/repos/LEVOGNE/STT/releases/latest`
+Neu: `https://api.github.com/repos/LEVOGNE/SystemTrayTerminal/releases/latest`
 
 > **Hinweis:** Diese URL funktioniert erst nach dem GitHub-Repo-Rename auf github.com!
 
 **Step 6: Onboarding-Video Resource (Zeile 14894)**
 
 Alt: `Bundle.main.url(forResource: "quickTERMINAL", withExtension: "mp4")`
-Neu: `Bundle.main.url(forResource: "STT", withExtension: "mp4")`
+Neu: `Bundle.main.url(forResource: "SystemTrayTerminal", withExtension: "mp4")`
 
 **Step 7: Factory Reset (Zeilen 17882–17910)**
 
@@ -298,25 +294,20 @@ try? fm.removeItem(atPath: home + "/.quickterminal")
 ```
 Neu:
 ```swift
-// --- Full factory reset: delete ALL STT data from system ---
-// A) Delete ~/.stt/ directory (shell history files)
-try? fm.removeItem(atPath: home + "/.stt")
+// --- Full factory reset: delete ALL SystemTrayTerminal data from system ---
+// A) Delete ~/.systemtrayterminal/ directory (shell history files)
+try? fm.removeItem(atPath: home + "/.systemtrayterminal")
 ```
 
 Zeile 17908:
 Alt: `cachesDir + "/com.l3v0.quickterminal"`
-Neu: `cachesDir + "/com.l3v0.stt"`
+Neu: `cachesDir + "/com.l3v0.systemtrayterminal"`
 
-**Step 8: SVG-Kommentar (Zeile 16636)**
-
-Alt: `// Exact reproduction of quickTERMINAL.svg`
-Neu: `// Exact reproduction of STT.svg` (oder einfach entfernen)
-
-**Step 9: Commit**
+**Step 8: Commit**
 
 ```bash
-git add STT.swift
-git commit -m "feat: update all system identifiers for STT (bundle, LaunchAgent, keychain, paths)"
+git add systemtrayterminal.swift
+git commit -m "feat: update system identifiers for SystemTrayTerminal (bundle, LaunchAgent, keychain, paths)"
 ```
 
 ---
@@ -324,18 +315,16 @@ git commit -m "feat: update all system identifiers for STT (bundle, LaunchAgent,
 ### Task 6: Migrations-Logik hinzufügen
 
 **Files:**
-- Modify: `STT.swift` — in `applicationDidFinishLaunching`, direkt nach Zeile 16619 (nach `register(defaults:)`)
+- Modify: `systemtrayterminal.swift` — direkt vor `applicationDidFinishLaunching`
 
 **Step 1: Migrations-Funktion hinzufügen**
-
-Füge **vor** `applicationDidFinishLaunching` eine private Funktion ein:
 
 ```swift
 private func migrateLegacyData() {
     let fm = FileManager.default
     let home = NSHomeDirectory()
     let oldConfigDir = home + "/.quickterminal"
-    let newConfigDir = home + "/.stt"
+    let newConfigDir = home + "/.systemtrayterminal"
 
     // 1. Migrate config directory
     if fm.fileExists(atPath: oldConfigDir) && !fm.fileExists(atPath: newConfigDir) {
@@ -349,7 +338,7 @@ private func migrateLegacyData() {
 
     // 2. Migrate UserDefaults from old domain to new domain
     let oldDomain = "com.l3v0.quickterminal"
-    let newDomain = "com.l3v0.stt"
+    let newDomain = "com.l3v0.systemtrayterminal"
     let defaults = UserDefaults.standard
     if let oldPrefs = UserDefaults(suiteName: oldDomain)?.dictionaryRepresentation(),
        !oldPrefs.isEmpty {
@@ -360,11 +349,10 @@ private func migrateLegacyData() {
             }
         }
         newDefaults?.synchronize()
-        // Remove old domain
         defaults.removePersistentDomain(forName: oldDomain)
     }
 
-    // 3. Migrate LaunchAgent (unload old, new will be registered on next autostart toggle)
+    // 3. Migrate LaunchAgent (unload old label, new label registered on next autostart toggle)
     let agentDir = home + "/Library/LaunchAgents"
     let oldPlist = agentDir + "/com.quickterminal.autostart.plist"
     if fm.fileExists(atPath: oldPlist) {
@@ -378,12 +366,10 @@ private func migrateLegacyData() {
 }
 ```
 
-**Step 2: Migrations-Aufruf in `applicationDidFinishLaunching`**
-
-Direkt nach `UserDefaults.standard.register(defaults: SettingsOverlay.defaultSettings)` (Zeile 16619) einfügen:
+**Step 2: Aufruf in `applicationDidFinishLaunching` (nach Zeile 16619)**
 
 ```swift
-// Migrate legacy data from quickTerminal → STT
+// Migrate legacy data from quickTerminal → SystemTrayTerminal
 migrateLegacyData()
 ```
 
@@ -397,8 +383,8 @@ Expected: Kompiliert ohne Fehler, Tests grün.
 **Step 4: Commit**
 
 ```bash
-git add STT.swift
-git commit -m "feat: add legacy data migration quickTerminal → STT"
+git add systemtrayterminal.swift
+git commit -m "feat: add legacy data migration quickTerminal → SystemTrayTerminal"
 ```
 
 ---
@@ -409,26 +395,25 @@ git commit -m "feat: add legacy data migration quickTerminal → STT"
 - Modify: `install.sh`
 - Modify: `FIRST_READ.txt`
 
-**Step 1: `install.sh` aktualisieren**
+**Step 1: `install.sh`**
 
 Ersetze alle Vorkommen:
-- `quickTerminal.app` → `STT.app`
-- `quickTERMINAL Installer` → `STT Installer`
-- `=== quickTERMINAL Installer ===` → `=== STT — SYSTEM TRAY TERMINAL Installer ===`
+- `quickTerminal.app` → `SystemTrayTerminal.app`
+- `quickTERMINAL Installer` → `SystemTrayTerminal Installer`
 
-**Step 2: `FIRST_READ.txt` aktualisieren**
+**Step 2: `FIRST_READ.txt`**
 
 Ersetze:
-- `quickTERMINAL` → `STT` (alle Vorkommen im ASCII-Banner und Text)
-- `quickTerminal.app` → `STT.app`
-- `xattr -cr quickTerminal.app` → `xattr -cr STT.app`
-- GitHub-URL: `LEVOGNE/quickTerminal` → `LEVOGNE/STT`
+- `quickTERMINAL` → `SystemTrayTerminal` (alle Vorkommen)
+- `quickTerminal.app` → `SystemTrayTerminal.app`
+- `xattr -cr quickTerminal.app` → `xattr -cr SystemTrayTerminal.app`
+- GitHub-URL: `LEVOGNE/quickTerminal` → `LEVOGNE/SystemTrayTerminal`
 
 **Step 3: Commit**
 
 ```bash
 git add install.sh FIRST_READ.txt
-git commit -m "docs: update install.sh and FIRST_READ.txt for STT"
+git commit -m "docs: update install.sh and FIRST_READ.txt for SystemTrayTerminal"
 ```
 
 ---
@@ -436,53 +421,39 @@ git commit -m "docs: update install.sh and FIRST_READ.txt for STT"
 ### Task 8: Dokumentation aktualisieren
 
 **Files:**
-- Modify: `README.md`
-- Modify: `CHANGELOG.md`
-- Modify: `COMMANDS.md`
-- Modify: `ROADMAP.md`
-- Modify: `MARKETING.md`
-- Modify: `CONTRIBUTING.md`
-- Modify: `SECURITY.md`
-- Modify: `CLAUDE.md`
-- Modify: `docs/index.html` (falls vorhanden)
+- Modify: `README.md`, `CHANGELOG.md`, `COMMANDS.md`, `ROADMAP.md`, `MARKETING.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CLAUDE.md`, `CODE_OF_CONDUCT.md`, `REMAINING_COMPAT.md`
+- Modify: `docs/index.html`
 
-**Step 1: Batch-Ersetzung in allen Docs**
+**Step 1: Batch-Ersetzung**
 
 ```bash
 cd "/Users/l3v0/Desktop/FERTIGE PROJEKTE/quickTerminal"
-# Alle Markdown-Dateien
 for f in README.md CHANGELOG.md COMMANDS.md ROADMAP.md MARKETING.md CONTRIBUTING.md SECURITY.md CLAUDE.md CODE_OF_CONDUCT.md REMAINING_COMPAT.md; do
     [ -f "$f" ] || continue
     sed -i '' \
-        -e 's/quickTERMINAL/STT/g' \
-        -e 's/quickTerminal/STT/g' \
-        -e 's/quickterminal/stt/g' \
+        -e 's/quickTERMINAL/SystemTrayTerminal/g' \
+        -e 's/quickTerminal/SystemTrayTerminal/g' \
+        -e 's/quickterminal/systemtrayterminal/g' \
         "$f"
 done
-```
-
-> **ACHTUNG**: Durchgehen und prüfen ob semantische Änderungen korrekt sind — besonders in CHANGELOG.md (historische Versionsnamen).
-
-**Step 2: docs/index.html**
-
-```bash
 [ -f docs/index.html ] && sed -i '' \
-    -e 's/quickTERMINAL/STT/g' \
-    -e 's/quickTerminal/STT/g' \
-    -e 's/quickterminal/stt/g' \
+    -e 's/quickTERMINAL/SystemTrayTerminal/g' \
+    -e 's/quickTerminal/SystemTrayTerminal/g' \
+    -e 's/quickterminal/systemtrayterminal/g' \
     docs/index.html
 ```
 
-**Step 3: CLAUDE.md im Projekt — Hauptdatei-Referenz aktualisieren**
+> **ACHTUNG**: CHANGELOG.md danach manuell prüfen — historische Versionsnamen sollen korrekt bleiben.
 
-In `CLAUDE.md` Zeile `- **Hauptdatei**: \`quickTerminal.swift\`...`:
-Neu: `- **Hauptdatei**: \`STT.swift\`...`
+**Step 2: CLAUDE.md Hauptdatei-Referenz**
 
-**Step 4: Commit**
+In `CLAUDE.md`: `quickTerminal.swift` → `systemtrayterminal.swift`
+
+**Step 3: Commit**
 
 ```bash
 git add README.md CHANGELOG.md COMMANDS.md ROADMAP.md MARKETING.md CONTRIBUTING.md SECURITY.md CLAUDE.md docs/
-git commit -m "docs: rename quickTerminal → STT throughout all documentation"
+git commit -m "docs: rename quickTerminal → SystemTrayTerminal throughout all documentation"
 ```
 
 ---
@@ -495,7 +466,7 @@ git commit -m "docs: rename quickTerminal → STT throughout all documentation"
 cd "/Users/l3v0/Desktop/FERTIGE PROJEKTE/quickTerminal"
 bash build.sh
 ```
-Expected: `Done! Run with: ./STT`, alle Tests grün.
+Expected: `Done! Run with: ./SystemTrayTerminal`, alle Tests grün.
 
 **Step 2: Alte Binaries aufräumen**
 
@@ -508,13 +479,12 @@ rm -f quickTerminal quickTerminal_debug.dSYM 2>/dev/null || true
 ```bash
 bash build_app.sh
 ```
-Expected: `STT.app` wird erstellt.
+Expected: `SystemTrayTerminal.app` wird erstellt.
 
 **Step 4: Commit wenn nötig**
 
 ```bash
 git status
-# Nur wenn es ungestagete Änderungen gibt:
 git add -A && git commit -m "chore: clean up old build artifacts"
 ```
 
@@ -522,59 +492,52 @@ git add -A && git commit -m "chore: clean up old build artifacts"
 
 ### Task 10: Verzeichnis umbenennen
 
-> **WICHTIG:** Dieser Task kommt ZULETZT! Nach dem Rename ändert sich der Pfad für git und alle weiteren Operationen.
+> **WICHTIG:** Dieser Task kommt ZULETZT!
 
 **Step 1: Verzeichnis umbenennen**
 
 ```bash
-mv "/Users/l3v0/Desktop/FERTIGE PROJEKTE/quickTerminal" "/Users/l3v0/Desktop/FERTIGE PROJEKTE/STT"
+mv "/Users/l3v0/Desktop/FERTIGE PROJEKTE/quickTerminal" "/Users/l3v0/Desktop/FERTIGE PROJEKTE/SystemTrayTerminal"
 ```
 
 **Step 2: Memory-Verzeichnis für neuen Pfad vorbereiten**
 
 ```bash
-mkdir -p "/Users/l3v0/.claude/projects/-Users-l3v0-Desktop-FERTIGE-PROJEKTE-STT/memory"
+mkdir -p "/Users/l3v0/.claude/projects/-Users-l3v0-Desktop-FERTIGE-PROJEKTE-SystemTrayTerminal/memory"
 cp "/Users/l3v0/.claude/projects/-Users-l3v0-Desktop-FERTIGE-PROJEKTE-quickTerminal/memory/MEMORY.md" \
-   "/Users/l3v0/.claude/projects/-Users-l3v0-Desktop-FERTIGE-PROJEKTE-STT/memory/MEMORY.md"
+   "/Users/l3v0/.claude/projects/-Users-l3v0-Desktop-FERTIGE-PROJEKTE-SystemTrayTerminal/memory/MEMORY.md"
 ```
 
 **Step 3: MEMORY.md im neuen Pfad aktualisieren**
 
-Ersetze in der kopierten MEMORY.md alle Pfad-Referenzen:
-- `quickTerminal.swift` → `STT.swift`
-- `/quickTerminal/` → `/STT/`
-- `~/.quickterminal/` → `~/.stt/`
-- `com.l3v0.quickterminal` → `com.l3v0.stt`
+Ersetze in der kopierten MEMORY.md:
+- `quickTerminal.swift` → `systemtrayterminal.swift`
+- `/quickTerminal/` → `/SystemTrayTerminal/`
+- `~/.quickterminal/` → `~/.systemtrayterminal/`
+- `com.l3v0.quickterminal` → `com.l3v0.systemtrayterminal`
+- `FERTIGE-PROJEKTE-quickTerminal` → `FERTIGE-PROJEKTE-SystemTrayTerminal`
 
-**Step 4: In neues Verzeichnis wechseln und verifizieren**
+**Step 4: Verifizieren**
 
 ```bash
-cd "/Users/l3v0/Desktop/FERTIGE PROJEKTE/STT"
-git status
+cd "/Users/l3v0/Desktop/FERTIGE PROJEKTE/SystemTrayTerminal"
 git log --oneline -5
-```
-Expected: git history vollständig erhalten.
-
-**Step 5: Abschließender Build**
-
-```bash
 bash build.sh
 ```
-Expected: Läuft sauber durch.
 
 ---
 
 ### Task 11: GitHub-Hinweis
 
-Das GitHub-Repository muss manuell umbenannt werden:
+Manuell auf github.com:
 
-1. Auf https://github.com/LEVOGNE/quickTerminal gehen
-2. Settings → Danger Zone → Rename Repository → `STT`
+1. Gehe zu `https://github.com/LEVOGNE/quickTerminal`
+2. Settings → Danger Zone → **Rename repository** → `SystemTrayTerminal`
 3. Danach Remote-URL aktualisieren:
 
 ```bash
-cd "/Users/l3v0/Desktop/FERTIGE PROJEKTE/STT"
-git remote set-url origin https://github.com/LEVOGNE/STT.git
+cd "/Users/l3v0/Desktop/FERTIGE PROJEKTE/SystemTrayTerminal"
+git remote set-url origin https://github.com/LEVOGNE/SystemTrayTerminal.git
 git push origin main
 ```
 
@@ -582,12 +545,12 @@ git push origin main
 
 ## Reihenfolge der Commits
 
-1. `chore: rename quickTerminal.swift → STT.swift`
-2. `chore: update build scripts for STT rename`
-3. `chore: rename quickTERMINAL.mp4 → STT.mp4`
-4. `feat: update all in-app display strings for STT rename`
-5. `feat: update all system identifiers for STT (bundle, LaunchAgent, keychain, paths)`
-6. `feat: add legacy data migration quickTerminal → STT`
-7. `docs: update install.sh and FIRST_READ.txt for STT`
-8. `docs: rename quickTerminal → STT throughout all documentation`
+1. `chore: rename quickTerminal.swift → systemtrayterminal.swift`
+2. `chore: update build scripts for SystemTrayTerminal rename`
+3. `chore: rename quickTERMINAL.mp4 → SystemTrayTerminal.mp4`
+4. `feat: update all in-app display strings for SystemTrayTerminal rename`
+5. `feat: update system identifiers for SystemTrayTerminal (bundle, LaunchAgent, keychain, paths)`
+6. `feat: add legacy data migration quickTerminal → SystemTrayTerminal`
+7. `docs: update install.sh and FIRST_READ.txt for SystemTrayTerminal`
+8. `docs: rename quickTerminal → SystemTrayTerminal throughout all documentation`
 9. *(Directory-Rename ist kein git-commit)*
