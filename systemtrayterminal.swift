@@ -12264,6 +12264,24 @@ class WebPickerSidebarView: NSView {
     private let disconnectBtn = NSButton()
     private let urlBg         = NSView()
     private let urlField      = NSTextField()
+    private let tabSwitcherBtn    = NSButton()
+    private let hotReloadBtn      = NSButton()
+    private let tabBox            = NSView()
+    private var tabBoxH: NSLayoutConstraint!
+    private var tabBoxVisible     = false
+
+    // ── Hot Reload ──
+    private var hotReloadEnabled  = false
+    private var fileWatcher: DispatchSourceFileSystemObject?
+    private var hotReloadPollTimer: Timer?
+    private var watchedPath: String?
+    private var watchedFileMtimes: [String: Date] = [:]
+    private var watchedFileCount  = 0
+    private let watchRow          = NSView()
+    private let watchFolderBtn    = NSButton()
+    private let watchStatusLabel  = NSTextField(labelWithString: "")
+    private var watchRowH: NSLayoutConstraint!
+    private static let watchFolderKey = "webPickerWatchFolder"
     private let previewSep         = NSView()
     private let picksHeaderLabel   = NSTextField(labelWithString: "")
     private let picksSep           = NSView()
@@ -12416,6 +12434,28 @@ class WebPickerSidebarView: NSView {
         urlField.delegate = self
         urlBg.addSubview(urlField)
 
+        // ── Tab switcher button ──
+        tabSwitcherBtn.title = "⊞"
+        tabSwitcherBtn.font = NSFont.systemFont(ofSize: 11)
+        tabSwitcherBtn.isBordered = false
+        tabSwitcherBtn.toolTip = "Switch Chrome tab"
+        tabSwitcherBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+        tabSwitcherBtn.target = self; tabSwitcherBtn.action = #selector(toggleTabSwitcher)
+        tabSwitcherBtn.isHidden = true
+        tabSwitcherBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(tabSwitcherBtn)
+
+        // ── Hot reload button (placeholder for Task 5) ──
+        hotReloadBtn.title = "⟳"
+        hotReloadBtn.font = NSFont.systemFont(ofSize: 12)
+        hotReloadBtn.isBordered = false
+        hotReloadBtn.toolTip = "Toggle hot reload"
+        hotReloadBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+        hotReloadBtn.target = self; hotReloadBtn.action = #selector(toggleHotReload)
+        hotReloadBtn.isHidden = true
+        hotReloadBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(hotReloadBtn)
+
         // ── Pick button ──
         pickBtn.title = Loc.pickElement
         pickBtn.bezelStyle = .rounded
@@ -12522,17 +12562,24 @@ class WebPickerSidebarView: NSView {
             disconnectBtn.centerYAnchor.constraint(equalTo: statusDot.centerYAnchor),
             // ── URL bar ──
             urlBg.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            urlBg.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            urlBg.trailingAnchor.constraint(equalTo: tabSwitcherBtn.leadingAnchor, constant: -4),
             urlBg.topAnchor.constraint(equalTo: statusDot.bottomAnchor, constant: 8),
             urlBg.heightAnchor.constraint(equalToConstant: 24),
             urlField.leadingAnchor.constraint(equalTo: urlBg.leadingAnchor, constant: 10),
             urlField.trailingAnchor.constraint(equalTo: urlBg.trailingAnchor, constant: -8),
             urlField.topAnchor.constraint(equalTo: urlBg.topAnchor),
             urlField.bottomAnchor.constraint(equalTo: urlBg.bottomAnchor),
+            // ── Tab switcher + hot reload buttons ──
+            hotReloadBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            hotReloadBtn.centerYAnchor.constraint(equalTo: urlBg.centerYAnchor),
+            hotReloadBtn.widthAnchor.constraint(equalToConstant: 20),
+            tabSwitcherBtn.trailingAnchor.constraint(equalTo: hotReloadBtn.leadingAnchor, constant: -4),
+            tabSwitcherBtn.centerYAnchor.constraint(equalTo: urlBg.centerYAnchor),
+            tabSwitcherBtn.widthAnchor.constraint(equalToConstant: 20),
             // ── Pick / Connect buttons (below urlBg) ──
             pickBtn.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             pickBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            pickBtn.topAnchor.constraint(equalTo: urlBg.bottomAnchor, constant: 8),
+            pickBtn.topAnchor.constraint(equalTo: watchRow.bottomAnchor, constant: 6),
             connectBtn.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             connectBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             connectBtn.topAnchor.constraint(equalTo: urlBg.bottomAnchor, constant: 8),
@@ -12584,6 +12631,56 @@ class WebPickerSidebarView: NSView {
         suggestBoxH = suggestBox.heightAnchor.constraint(equalToConstant: 0)
         suggestBoxH.isActive = true
 
+        // ── Tab switcher dropdown ──
+        tabBox.wantsLayer = true
+        tabBox.layer?.backgroundColor = NSColor(calibratedWhite: 0.10, alpha: 0.97).cgColor
+        tabBox.layer?.cornerRadius = 5
+        tabBox.layer?.borderColor = NSColor(calibratedWhite: 0.22, alpha: 1).cgColor
+        tabBox.layer?.borderWidth = 0.5
+        tabBox.isHidden = true
+        tabBox.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(tabBox)
+        NSLayoutConstraint.activate([
+            tabBox.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            tabBox.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            tabBox.topAnchor.constraint(equalTo: urlBg.bottomAnchor, constant: 2),
+        ])
+        tabBoxH = tabBox.heightAnchor.constraint(equalToConstant: 0)
+        tabBoxH.isActive = true
+
+        // ── Watch row (appears under URL bar when hot reload active on localhost) ──
+        watchRow.isHidden = true
+        watchRow.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(watchRow)
+
+        watchFolderBtn.title = "📁"
+        watchFolderBtn.isBordered = false
+        watchFolderBtn.font = NSFont.systemFont(ofSize: 11)
+        watchFolderBtn.toolTip = "Select project folder to watch"
+        watchFolderBtn.target = self; watchFolderBtn.action = #selector(selectWatchFolder)
+        watchFolderBtn.translatesAutoresizingMaskIntoConstraints = false
+        watchRow.addSubview(watchFolderBtn)
+
+        watchStatusLabel.font = NSFont.monospacedSystemFont(ofSize: 8.5, weight: .regular)
+        watchStatusLabel.textColor = Self.teal.withAlphaComponent(0.7)
+        watchStatusLabel.lineBreakMode = .byTruncatingHead
+        watchStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+        watchRow.addSubview(watchStatusLabel)
+
+        NSLayoutConstraint.activate([
+            watchRow.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            watchRow.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            watchRow.topAnchor.constraint(equalTo: urlBg.bottomAnchor, constant: 28),
+            watchFolderBtn.leadingAnchor.constraint(equalTo: watchRow.leadingAnchor),
+            watchFolderBtn.centerYAnchor.constraint(equalTo: watchRow.centerYAnchor),
+            watchFolderBtn.widthAnchor.constraint(equalToConstant: 22),
+            watchStatusLabel.leadingAnchor.constraint(equalTo: watchFolderBtn.trailingAnchor, constant: 4),
+            watchStatusLabel.trailingAnchor.constraint(equalTo: watchRow.trailingAnchor),
+            watchStatusLabel.centerYAnchor.constraint(equalTo: watchRow.centerYAnchor),
+        ])
+        watchRowH = watchRow.heightAnchor.constraint(equalToConstant: 0)
+        watchRowH.isActive = true
+
         showDisconnectedState()
     }
 
@@ -12614,6 +12711,9 @@ class WebPickerSidebarView: NSView {
         styleTealButton(connectBtn, enabled: true)
         urlBg.isHidden = true; urlField.stringValue = ""
         hideSuggestions()
+        tabSwitcherBtn.isHidden = true
+        hotReloadBtn.isHidden = true
+        hideTabBox()
         previewSep.isHidden = true
         clearPickList()
         feedbackLabel.isHidden = true
@@ -12631,6 +12731,9 @@ class WebPickerSidebarView: NSView {
         connectBtn.isEnabled = false
         styleTealButton(connectBtn, enabled: false)
         previewSep.isHidden = true
+        tabSwitcherBtn.isHidden = true
+        hotReloadBtn.isHidden = true
+        hideTabBox()
         statusLabelTrailingConnected?.isActive = false
         statusLabelTrailingDisconnected?.isActive = true
     }
@@ -12650,6 +12753,8 @@ class WebPickerSidebarView: NSView {
         styleTealButton(pickBtn, enabled: !navigating)
         disconnectBtn.isHidden = false
         previewSep.isHidden = false
+        tabSwitcherBtn.isHidden = false
+        hotReloadBtn.isHidden = false
         if picks.isEmpty { restorePicksFromDisk() }
         statusLabelTrailingDisconnected?.isActive = false
         statusLabelTrailingConnected?.isActive = true
@@ -12696,6 +12801,10 @@ class WebPickerSidebarView: NSView {
         isConnected = false
         cdp.onDisconnected = nil
         pickBtn.title = Loc.pickElement
+        stopWatching()
+        hotReloadEnabled = false
+        hotReloadBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+        hideWatchRow()
         let cleanup = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';});void 0;"
         if let tid = currentTargetId {
             cdp.evaluate(cleanup) { [weak self] _ in
@@ -12723,6 +12832,10 @@ class WebPickerSidebarView: NSView {
         isConnected = false
         cdp.onDisconnected = nil
         pickBtn.title = Loc.pickElement
+        stopWatching()
+        hotReloadEnabled = false
+        hotReloadBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+        hideWatchRow()
         let cleanup = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';});void 0;"
         cdp.evaluate(cleanup) { [weak self] _ in self?.cdp.disconnect() }
         // NOTE: currentTargetId kept intact in UserDefaults so connect() can reconnect to same tab
@@ -12755,6 +12868,9 @@ class WebPickerSidebarView: NSView {
         titlePollTimer?.invalidate(); titlePollTimer = nil
         currentTargetId = nil
         cdp.disconnect()
+        stopWatching(); hotReloadEnabled = false
+        hotReloadBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+        hideWatchRow()
         showDisconnectedState()
         setStatusText(message)
     }
@@ -12852,6 +12968,219 @@ class WebPickerSidebarView: NSView {
     @objc private func openDebugJSON() {
         let port = ChromeCDPClient.debugPort
         NSWorkspace.shared.open(URL(string: "http://localhost:\(port)/json")!)
+    }
+
+    // MARK: - Tab Switcher
+
+    @objc private func toggleTabSwitcher() {
+        if tabBoxVisible { hideTabBox(); return }
+        tabBoxVisible = true
+        tabBox.subviews.forEach { $0.removeFromSuperview() }
+        // Fetch tab list from Chrome HTTP endpoint
+        guard let url = URL(string: "http://localhost:\(ChromeCDPClient.debugPort)/json/list") else { return }
+        var req = URLRequest(url: url); req.timeoutInterval = 3
+        URLSession.shared.dataTask(with: req) { [weak self] data, _, _ in
+            guard let self = self,
+                  let data = data,
+                  let tabs = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                DispatchQueue.main.async { [weak self] in self?.tabBoxVisible = false }
+                return
+            }
+            let pages = Array(tabs.filter { ($0["type"] as? String) == "page" }.prefix(8))
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                guard !pages.isEmpty else { self.tabBoxVisible = false; return }
+                let rowH: CGFloat = 24
+                for (i, tab) in pages.enumerated() {
+                    let title  = (tab["title"]  as? String ?? "").isEmpty ? (tab["url"] as? String ?? "") : (tab["title"] as? String ?? "")
+                    let tabURL = tab["url"] as? String ?? ""
+                    let tabId  = tab["id"]  as? String ?? ""
+                    let wsURL  = tab["webSocketDebuggerUrl"] as? String ?? ""
+                    let isActive = tabId == self.currentTargetId
+                    let btn = NSButton(title: "\(isActive ? "▶ " : "   ")\(title)",
+                                       target: self, action: #selector(self.selectTab(_:)))
+                    btn.isBordered = false
+                    btn.alignment = .left
+                    btn.font = NSFont.monospacedSystemFont(ofSize: 9, weight: isActive ? .semibold : .regular)
+                    btn.contentTintColor = isActive ? WebPickerSidebarView.teal : NSColor(calibratedWhite: 0.72, alpha: 1)
+                    btn.lineBreakMode = .byTruncatingTail
+                    btn.toolTip = tabURL
+                    btn.identifier = NSUserInterfaceItemIdentifier(rawValue: wsURL)
+                    btn.translatesAutoresizingMaskIntoConstraints = false
+                    self.tabBox.addSubview(btn)
+                    NSLayoutConstraint.activate([
+                        btn.leadingAnchor.constraint(equalTo: self.tabBox.leadingAnchor, constant: 6),
+                        btn.trailingAnchor.constraint(equalTo: self.tabBox.trailingAnchor, constant: -6),
+                        btn.topAnchor.constraint(equalTo: self.tabBox.topAnchor, constant: CGFloat(i) * rowH + 2),
+                        btn.heightAnchor.constraint(equalToConstant: rowH),
+                    ])
+                }
+                self.tabBoxH.constant = CGFloat(pages.count) * rowH + 4
+                self.tabBox.isHidden = false
+            }
+        }.resume()
+    }
+
+    private func hideTabBox() {
+        tabBoxVisible = false
+        tabBox.isHidden = true
+        tabBox.subviews.forEach { $0.removeFromSuperview() }
+        tabBoxH.constant = 0
+    }
+
+    @objc private func selectTab(_ sender: NSButton) {
+        let wsURL = sender.identifier?.rawValue ?? ""
+        hideTabBox()
+        guard !wsURL.isEmpty else { return }
+        cdp.disconnect()
+        isConnected = false
+        doConnect(to: wsURL)
+    }
+
+    @objc private func toggleHotReload() {
+        hotReloadEnabled = !hotReloadEnabled
+        if hotReloadEnabled {
+            hotReloadBtn.contentTintColor = Self.teal
+            startAutoDetectWatch()
+        } else {
+            hotReloadBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+            stopWatching()
+            hideWatchRow()
+        }
+    }
+
+    private func startAutoDetectWatch() {
+        // Fetch current tab URL from /json/list to decide file:// vs localhost
+        guard let url = URL(string: "http://localhost:\(ChromeCDPClient.debugPort)/json/list") else { return }
+        var req = URLRequest(url: url); req.timeoutInterval = 2
+        URLSession.shared.dataTask(with: req) { [weak self] data, _, _ in
+            guard let self = self,
+                  let data = data,
+                  let tabs = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+                  let tab = tabs.first(where: { ($0["id"] as? String) == self.currentTargetId }),
+                  let tabURL = tab["url"] as? String else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                if tabURL.hasPrefix("file://"), let path = URL(string: tabURL)?.path {
+                    self.startFileWatcher(path: path)
+                } else {
+                    let saved = UserDefaults.standard.string(forKey: Self.watchFolderKey)
+                    if let saved = saved, FileManager.default.fileExists(atPath: saved) {
+                        self.startPollingWatcher(directory: saved)
+                    } else {
+                        self.showWatchRow(forLocalhost: true)
+                    }
+                }
+            }
+        }.resume()
+    }
+
+    @objc private func selectWatchFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false; panel.canChooseDirectories = true
+        panel.prompt = "Watch"
+        panel.begin { [weak self] response in
+            guard let self = self, response == .OK, let url = panel.url else { return }
+            UserDefaults.standard.set(url.path, forKey: Self.watchFolderKey)
+            DispatchQueue.main.async { self.startPollingWatcher(directory: url.path) }
+        }
+    }
+
+    private func startFileWatcher(path: String) {
+        stopWatching()
+        watchedPath = path
+        let fd = open(path, O_EVTONLY)
+        guard fd >= 0 else {
+            watchStatusLabel.stringValue = "⚠ can't open file"
+            showWatchRow(forLocalhost: false)
+            return
+        }
+        let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd,
+                                                            eventMask: [.write, .rename, .delete],
+                                                            queue: .main)
+        src.setEventHandler { [weak self] in
+            guard let self = self else { return }
+            let mask = src.data
+            if mask.contains(.delete) || mask.contains(.rename) {
+                self.startFileWatcher(path: path)
+            } else {
+                self.triggerHotReload()
+            }
+        }
+        src.setCancelHandler { close(fd) }
+        src.resume()
+        fileWatcher = src
+        let name = URL(fileURLWithPath: path).lastPathComponent
+        watchStatusLabel.stringValue = "● \(name)"
+        showWatchRow(forLocalhost: false)
+    }
+
+    private func startPollingWatcher(directory: String) {
+        stopWatching()
+        watchedPath = directory
+        watchedFileMtimes = scanMtimes(directory: directory)
+        watchedFileCount = watchedFileMtimes.count
+        hotReloadPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self, let dir = self.watchedPath else { return }
+            let current = self.scanMtimes(directory: dir)
+            if current != self.watchedFileMtimes {
+                self.watchedFileMtimes = current
+                self.triggerHotReload()
+            }
+        }
+        let dirName = URL(fileURLWithPath: directory).lastPathComponent
+        watchStatusLabel.stringValue = "● \(watchedFileCount) files in \(dirName)"
+        showWatchRow(forLocalhost: true)
+    }
+
+    private func scanMtimes(directory: String) -> [String: Date] {
+        var result: [String: Date] = [:]
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(atPath: directory) else { return result }
+        for case let file as String in enumerator {
+            if enumerator.level > 3 { enumerator.skipDescendants(); continue }
+            let fullPath = (directory as NSString).appendingPathComponent(file)
+            if let attrs = try? fm.attributesOfItem(atPath: fullPath),
+               let mtime = attrs[.modificationDate] as? Date {
+                result[fullPath] = mtime
+            }
+        }
+        return result
+    }
+
+    private func triggerHotReload() {
+        guard hotReloadEnabled, isConnected else { return }
+        cdp.cdpCommand("Page.reload", params: ["ignoreCache": true]) { _ in }
+        let prev = watchStatusLabel.stringValue
+        watchStatusLabel.stringValue = "↺ reloaded"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.watchStatusLabel.stringValue = prev
+        }
+    }
+
+    private func showWatchRow(forLocalhost: Bool) {
+        watchFolderBtn.isHidden = !forLocalhost
+        watchRow.isHidden = false
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            self.watchRowH.animator().constant = 20
+        }
+    }
+
+    private func hideWatchRow() {
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.12
+            self.watchRowH.animator().constant = 0
+        }, completionHandler: { [weak self] in
+            self?.watchRow.isHidden = true
+        })
+    }
+
+    private func stopWatching() {
+        fileWatcher?.cancel(); fileWatcher = nil
+        hotReloadPollTimer?.invalidate(); hotReloadPollTimer = nil
+        watchedFileMtimes = [:]
+        watchedPath = nil
     }
 
     // MARK: - Picker
@@ -13246,6 +13575,7 @@ class WebPickerSidebarView: NSView {
         pollTimer?.invalidate()
         tabSearchTimer?.invalidate()
         titlePollTimer?.invalidate()
+        stopWatching()
         cdp.disconnect()
         NotificationCenter.default.removeObserver(self, name: .appLanguageChanged, object: nil)
     }
