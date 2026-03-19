@@ -4,6 +4,33 @@ All notable changes to SystemTrayTerminal are documented here.
 
 ---
 
+## v1.5.3 — 2026-03-19
+
+### New Features
+
+- **Git Panel: Instant Refresh** — DispatchSource watches `.git/HEAD` and `.git/index` for file events. The panel updates within ~100ms of any `git add`, `git commit`, or `git reset` command in the terminal — no polling delay. A `↻` manual refresh button is added to the header card.
+- **Git Panel: Undo Last Commit** — A new `↩` row below the commit save button shows the last commit hash + subject. Click once → button turns red and shows "Sicher?" with a 4-second auto-reset. Click again → `git reset --soft HEAD~1` runs, changes stay staged, panel refreshes.
+- **Git Panel: .gitignore Manager** — Hover over any file row → a `✕` button appears on the right. Click it or right-click for "Zu .gitignore hinzufügen" to append the path to `.gitignore` instantly. Duplicate detection shows feedback "Bereits ignoriert".
+- **Terminal: Cmd+Z Undo** — `Cmd+Z` sends `Ctrl+_` (ASCII 0x1F) to the PTY. readline interprets this as undo, walking back through the input line's edit history.
+- **WebPicker: Chrome Tab Switcher** — Dropdown in the header lists all open Chrome tabs. Click to switch the active connection instantly.
+- **WebPicker: Hot Reload** — DispatchSource watcher on `file://` pages + localhost folder polling. The connected page refreshes automatically when source files change on disk.
+- **WebPicker: Computed Style Inspector** — Click any picked element to expand its full CSS computed property list. The panel height grows and shrinks with the styles.
+- **WebPicker: JS REPL Panel** — Run JavaScript directly in the connected page's context. Arrow-key history navigation, spring-eased scroll.
+- **WebPicker: Element Screenshot** — Right-click a picked element to capture its exact bounding box via CDP `DOM.getBoxModel` + `Page.captureScreenshot`. 2-step CDP chain (was 4).
+- **WebPicker: Picks Persistence** — Picked elements are saved to UserDefaults and restored on reconnect. Pick list now scrollable with limit raised from 5 → 20 entries.
+- **WebPicker: CSS Selector / XPath Extraction** — Right-click any picked element to copy its CSS selector or XPath in full/short/absolute/relative formats via context submenu.
+
+### Internal
+
+- `rebuildFilesStack` key now includes status chars (`x`, `y`) — was a silent bug where `git add` changed file status but the row list didn't rebuild.
+- `undoConfirmPending` state removed — derived from `undoConfirmTimer != nil`.
+- `addToGitignore` file I/O moved to `DispatchQueue.global` off the main thread.
+- `WebPickerSidebarView.pickerCleanupJS` extracted as `private static let` — was duplicated inline in `hardDisconnect` and `softDisconnect`.
+- `jsEscapeSelector(_:)` helper extracted — CSS selector escaping was duplicated at 3 call sites.
+- Polling timer interval: 3s → 5s (DispatchSource watchers handle fast events).
+
+---
+
 ## v1.5.2 — 2026-03-19
 
 ### Bug Fixes

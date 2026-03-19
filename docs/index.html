@@ -42,7 +42,7 @@
   "description": "A blazing-fast terminal emulator for macOS, written from scratch in a single Swift file. 20,700+ lines, zero dependencies, native Cocoa rendering at 60 FPS.",
   "url": "https://levogne.github.io/SystemTrayTerminal/",
   "downloadUrl": "https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest",
-  "softwareVersion": "1.5.2",
+  "softwareVersion": "1.5.3",
   "fileSize": "2.9 MB",
   "author": {
     "@type": "Person",
@@ -1100,7 +1100,7 @@ footer {
         <noscript>
           <div class="terminal-line"><span class="prompt">~ </span><span class="cmd">neofetch --minimal</span></div>
           <div class="terminal-line"><span class="output">  macOS 15.2 Sequoia</span></div>
-          <div class="terminal-line"><span class="output">  Terminal: <span class="highlight">SystemTrayTerminal v1.5.2</span></span></div>
+          <div class="terminal-line"><span class="output">  Terminal: <span class="highlight">SystemTrayTerminal v1.5.3</span></span></div>
           <div class="terminal-line"><span class="output">  Shell: zsh 5.9</span></div>
           <div class="terminal-line"><span class="prompt">~ </span><span class="cmd">systemtrayterminal --info</span></div>
           <div class="terminal-line"><span class="output">  <span class="amber">20,700+</span> lines | <span class="amber">1</span> file | <span class="amber">0</span> deps | <span class="amber">2.9 MB</span></span></div>
@@ -1332,7 +1332,7 @@ footer {
       <div class="install-card">
         <h3>Direct Download</h3>
         <div class="install-cmd" onclick="window.open('https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest', '_blank')">
-          <span>Download SystemTrayTerminal_v1.5.2.zip</span>
+          <span>Download SystemTrayTerminal_v1.5.3.zip</span>
           <button class="copy-btn" aria-label="Download">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
@@ -1363,12 +1363,37 @@ footer {
 
     <div class="changelog-list">
 
+      <!-- v1.5.3 -->
+      <div class="changelog-entry">
+        <div class="changelog-left">
+          <span class="changelog-ver">v1.5.3</span>
+          <span class="changelog-date">2026-03-19</span>
+          <span class="changelog-tag latest">Latest</span>
+        </div>
+        <div class="changelog-right">
+          <div class="changelog-title">Git Panel Reactivity · Undo Commit · .gitignore Manager · WebPicker Major Update · Cmd+Z Undo</div>
+          <div class="changelog-items">
+            <div class="changelog-item"><strong>Git Panel: Instant Refresh</strong> — DispatchSource watches <code>.git/HEAD</code> + <code>.git/index</code>; panel updates within ~100ms of any git command. Manual <code>↻</code> button in header.</div>
+            <div class="changelog-item"><strong>Git Panel: Undo Last Commit</strong> — <code>↩</code> button shows last commit; 2-click confirmation runs <code>git reset --soft HEAD~1</code>, keeping changes staged</div>
+            <div class="changelog-item"><strong>Git Panel: .gitignore Manager</strong> — Hover a file row → <code>✕</code> button; click or right-click to append to <code>.gitignore</code> with duplicate detection</div>
+            <div class="changelog-item"><strong>Terminal: Cmd+Z Undo</strong> — sends <code>Ctrl+_</code> to PTY; readline walks back through input line edit history</div>
+            <div class="changelog-item"><strong>WebPicker: Chrome Tab Switcher</strong> — dropdown lists all open Chrome tabs, click to switch connection instantly</div>
+            <div class="changelog-item"><strong>WebPicker: Hot Reload</strong> — DispatchSource watcher on file:// pages + localhost polling; page refreshes when source files change</div>
+            <div class="changelog-item"><strong>WebPicker: Computed Style Inspector</strong> — click a picked element to expand its full CSS property list</div>
+            <div class="changelog-item"><strong>WebPicker: JS REPL</strong> — run JavaScript in the connected page's context with arrow-key history</div>
+            <div class="changelog-item"><strong>WebPicker: Element Screenshot</strong> — right-click a picked element to capture its exact bounding box (2-step CDP chain)</div>
+            <div class="changelog-item"><strong>WebPicker: Picks Persistence</strong> — picks saved to UserDefaults, restored on reconnect; list scrollable with limit raised 5→20</div>
+            <div class="changelog-item"><strong>WebPicker: CSS Selector / XPath Extraction</strong> — right-click any pick to copy full/short CSS selector or absolute/relative XPath</div>
+          </div>
+        </div>
+      </div>
+
       <!-- v1.5.2 -->
       <div class="changelog-entry">
         <div class="changelog-left">
           <span class="changelog-ver">v1.5.2</span>
           <span class="changelog-date">2026-03-19</span>
-          <span class="changelog-tag latest">Latest</span>
+          <span class="changelog-tag fix">Fix</span>
         </div>
         <div class="changelog-right">
           <div class="changelog-title">Window Fixes · async/await Migration · Feedback Bug Fix</div>
@@ -1570,7 +1595,7 @@ footer {
 const termLines = [
   { prompt: '~ ', cmd: 'neofetch --minimal', delay: 0 },
   { output: '  macOS 15.2 Sequoia', delay: 400 },
-  { output: '  Terminal: <span class="highlight">SystemTrayTerminal v1.5.2</span>', delay: 600 },
+  { output: '  Terminal: <span class="highlight">SystemTrayTerminal v1.5.3</span>', delay: 600 },
   { output: '  Shell: zsh 5.9', delay: 800 },
   { output: '  Resolution: 2560x1600', delay: 1000 },
   { output: '', delay: 1200 },

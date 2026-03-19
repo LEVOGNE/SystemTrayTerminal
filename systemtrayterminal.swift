@@ -11,7 +11,7 @@ import WebKit
 
 // MARK: - Version
 
-let kAppVersion = "1.5.2"
+let kAppVersion = "1.5.3"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
