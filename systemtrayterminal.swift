@@ -9770,17 +9770,33 @@ class ClickableFileRow: NSView {
     var statusX: Character = " "
     var statusY: Character = " "
     var onClick: (() -> Void)?
+    var onIgnore: (() -> Void)?
+    private let ignoreBtn = NSButton()
     private var trackingArea: NSTrackingArea?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         layer?.cornerRadius = 3
+
+        ignoreBtn.title = "✕"
+        ignoreBtn.isBordered = false
+        ignoreBtn.font = NSFont.systemFont(ofSize: 9, weight: .regular)
+        ignoreBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1.0)
+        ignoreBtn.alphaValue = 0
+        ignoreBtn.target = self
+        ignoreBtn.action = #selector(ignoreBtnClicked)
+        ignoreBtn.translatesAutoresizingMaskIntoConstraints = false
+        ignoreBtn.setContentHuggingPriority(.required, for: .horizontal)
+
         marqueeLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(ignoreBtn)
         addSubview(marqueeLabel)
         NSLayoutConstraint.activate([
+            ignoreBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+            ignoreBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
             marqueeLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
-            marqueeLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+            marqueeLabel.trailingAnchor.constraint(equalTo: ignoreBtn.leadingAnchor, constant: -2),
             marqueeLabel.topAnchor.constraint(equalTo: topAnchor),
             marqueeLabel.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
@@ -9795,12 +9811,27 @@ class ClickableFileRow: NSView {
     }
     override func mouseEntered(with event: NSEvent) {
         layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.06).cgColor
+        ignoreBtn.alphaValue = 1
     }
     override func mouseExited(with event: NSEvent) {
         layer?.backgroundColor = nil
+        ignoreBtn.alphaValue = 0
     }
     override func mouseDown(with event: NSEvent) {
         onClick?()
+    }
+
+    @objc private func ignoreBtnClicked() {
+        onIgnore?()
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard onIgnore != nil else { return nil }
+        let m = NSMenu()
+        let item = NSMenuItem(title: "Zu .gitignore hinzufügen", action: #selector(ignoreBtnClicked), keyEquivalent: "")
+        item.target = self
+        m.addItem(item)
+        return m
     }
 }
 
@@ -10806,6 +10837,7 @@ class GitPanelView: NSView {
             row.marqueeLabel.attributedText = entry.attr
             row.heightAnchor.constraint(equalToConstant: 18).isActive = true
             row.onClick = { [weak self] in self?.toggleDiff(for: entry.path, x: entry.x, y: entry.y) }
+            row.onIgnore = { [weak self] in self?.addToGitignore(path: entry.path) }
             filesStack.addArrangedSubview(row)
         }
     }
@@ -11024,6 +11056,44 @@ class GitPanelView: NSView {
                 self.showFeedback(commit.success ? "\(Loc.savedMsg): \(msg)" : "Error: \(commit.output)", success: commit.success)
                 self.refresh()
             }
+        }
+    }
+
+    // MARK: - Actions: .gitignore
+
+    private func addToGitignore(path: String) {
+        guard let gitRoot = watchedGitRoot else {
+            showFeedback("Kein Git-Repo", success: false)
+            return
+        }
+        let ignorePath = gitRoot + "/.gitignore"
+        let fm = FileManager.default
+
+        var existing = ""
+        if fm.fileExists(atPath: ignorePath),
+           let content = try? String(contentsOfFile: ignorePath, encoding: .utf8) {
+            existing = content
+        }
+
+        let lines = existing.components(separatedBy: "\n")
+        if lines.contains(path) {
+            showFeedback("Bereits ignoriert", success: true)
+            return
+        }
+
+        let newContent: String
+        if existing.isEmpty || existing.hasSuffix("\n") {
+            newContent = existing + path + "\n"
+        } else {
+            newContent = existing + "\n" + path + "\n"
+        }
+
+        do {
+            try newContent.write(toFile: ignorePath, atomically: true, encoding: .utf8)
+            showFeedback("→ .gitignore", success: true)
+            refresh()
+        } catch {
+            showFeedback("Schreiben fehlgeschlagen", success: false)
         }
     }
 
@@ -12317,6 +12387,7 @@ private final class PickRowView: NSView {
         labelScroll.documentView = label
         labelScroll.hasVerticalScroller = false
         labelScroll.hasHorizontalScroller = true
+        labelScroll.horizontalScroller?.alphaValue = 0
         labelScroll.autohidesScrollers = true
         labelScroll.scrollerStyle = .overlay
         labelScroll.drawsBackground = false
@@ -12386,7 +12457,7 @@ private final class PickRowView: NSView {
         if (event.trackingArea?.userInfo?["t"] as? String) == "x" {
             xBtn.contentTintColor = NSColor(calibratedRed: 0.9, green: 0.35, blue: 0.35, alpha: 1)
         } else {
-            layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.06).cgColor
+            layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.10).cgColor
             alphaValue = 1.0
             onHighlight?()
         }
@@ -12763,6 +12834,11 @@ class WebPickerSidebarView: NSView {
         feedbackLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(feedbackLabel)
 
+        // watchRow must be in the hierarchy before the activate block below,
+        // because pickBtn.topAnchor is constrained to watchRow.bottomAnchor.
+        watchRow.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(watchRow)
+
         NSLayoutConstraint.activate([
             // ── Title bar ──
             titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
@@ -12888,9 +12964,7 @@ class WebPickerSidebarView: NSView {
         tabBoxH.isActive = true
 
         // ── Watch row (appears under URL bar when hot reload active on localhost) ──
-        watchRow.isHidden = true
-        watchRow.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(watchRow)
+        watchRow.isHidden = true  // addSubview already called earlier before activate block
 
         watchFolderBtn.title = "📁"
         watchFolderBtn.isBordered = false
@@ -13109,7 +13183,7 @@ class WebPickerSidebarView: NSView {
         cdp.onDisconnected = nil
         pickBtn.title = Loc.pickElement
         deactivateHotReload()
-        let cleanup = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';});void 0;"
+        let cleanup = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';el.style.boxShadow='';});void 0;"
         if let tid = currentTargetId {
             cdp.evaluate(cleanup) { [weak self] _ in
                 guard let self = self else { return }
@@ -13137,7 +13211,7 @@ class WebPickerSidebarView: NSView {
         cdp.onDisconnected = nil
         pickBtn.title = Loc.pickElement
         deactivateHotReload()
-        let cleanup = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';});void 0;"
+        let cleanup = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';el.style.boxShadow='';});void 0;"
         cdp.evaluate(cleanup) { [weak self] _ in self?.cdp.disconnect() }
         // NOTE: currentTargetId kept intact in UserDefaults so connect() can reconnect to same tab
         showDisconnectedState()
@@ -13657,13 +13731,15 @@ class WebPickerSidebarView: NSView {
         }
     }
 
-    private func highlightPick(id: Int, hex: String) {
-        let js = "var el=document.querySelector('[data-qt-pick-\(id)]');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.outline='3px solid \(hex)';el.style.outlineOffset='-3px';}void 0;"
+    private func highlightPick(id: Int, hex: String, selector: String = "") {
+        let esc = selector.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let js = "(function(){var el=document.querySelector('[data-qt-pick-\(id)]')||(\"\(esc)\".length?document.querySelector(\"\(esc)\"):null);if(!el)return;var h='\(hex)',r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);el.style.boxShadow='inset 0 0 0 9999px rgba('+r+','+g+','+b+',0.22)';el.scrollIntoView({behavior:'smooth',block:'nearest'});})();void 0;"
         cdp.evaluate(js) { _ in }
     }
 
-    private func unhighlightPick(id: Int) {
-        let js = "var el=document.querySelector('[data-qt-pick-\(id)]');if(el){el.style.outline='';el.style.outlineOffset='';}void 0;"
+    private func unhighlightPick(id: Int, selector: String = "") {
+        let esc = selector.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let js = "(function(){var el=document.querySelector('[data-qt-pick-\(id)]')||(\"\(esc)\".length?document.querySelector(\"\(esc)\"):null);if(el)el.style.boxShadow='';})();void 0;"
         cdp.evaluate(js) { _ in }
     }
 
@@ -13680,7 +13756,7 @@ class WebPickerSidebarView: NSView {
     @objc private func clearAllPicksAction() {
         // Reset browser: deactivate picker, remove style tag + inline outlines only
         // data-qt-pick-N attributes stay so hover-highlight keeps working
-        let js = "window.__qtPickerActive=false;var s=document.getElementById('__qt_picker_style');if(s)s.remove();document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';});void 0;"
+        let js = "window.__qtPickerActive=false;var s=document.getElementById('__qt_picker_style');if(s)s.remove();document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';el.style.boxShadow='';});void 0;"
         cdp.evaluate(js) { _ in }
         // Cancel active pick poll if running
         pollTimer?.invalidate(); pollTimer = nil
@@ -13702,8 +13778,9 @@ class WebPickerSidebarView: NSView {
         row.onStylesRequested = { [weak self] id in
             self?.fetchComputedStyle(pickId: id)
         }
-        row.onHighlight   = { [weak self] in self?.highlightPick(id: id, hex: hex) }
-        row.onUnhighlight = { [weak self] in self?.unhighlightPick(id: id) }
+        let selector = entry.selector
+        row.onHighlight   = { [weak self] in self?.highlightPick(id: id, hex: hex, selector: selector) }
+        row.onUnhighlight = { [weak self] in self?.unhighlightPick(id: id, selector: selector) }
         row.onCopied      = { [weak self] in self?.showCopiedFeedback() }
         row.onRemove = { [weak self] in
             guard let self = self else { return }
