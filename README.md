@@ -32,6 +32,26 @@
 
 </div>
 
+## Table of Contents
+
+- [Install](#install)
+- [Why SystemTrayTerminal?](#why-systemtrayterminal)
+- [Features](#features)
+  - [Terminal Emulation](#terminal-emulation)
+  - [Text Editor](#text-editor)
+  - [Window & UI](#window--ui)
+  - [The Parser](#the-parser)
+- [Shells & Prompt Themes](#shells)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [quickBAR](#quickbar)
+- [Mouse](#mouse)
+- [Settings](#settings)
+- [Architecture](#architecture)
+- [Build](#build)
+- [Open Source](#open-source)
+
+---
+
 ## Install
 
 > **Download → Unzip → Remove Quarantine → Done.**
@@ -221,6 +241,9 @@
 | :pushpin: | **Detach / Reattach** | Float window freely on desktop with full 8-edge resize; snap back to tray from right-click menu |
 | :clapper: | **Onboarding Video** | First-launch intro video panel — plays once automatically |
 | :globe_with_meridians: | **10 Languages** | Full UI localization: EN, DE, TR, ES, FR, IT, AR, JA, ZH, RU |
+| :triangular_ruler: | **Arrow Positioning** | Popover arrow always tracks the tray icon — correct after restart, sleep/wake, and monitor changes *(v1.5.2)* |
+| :zzz: | **Sleep/Wake Recovery** | Window repositions correctly 400 ms after wake — custom horizontal offset preserved *(v1.5.2)* |
+| :tv: | **Screen-Change Recovery** | Window repositions when monitors connect/disconnect or resolution changes *(v1.5.2)* |
 
 <br>
 
