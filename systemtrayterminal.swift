@@ -11,7 +11,7 @@ import WebKit
 
 // MARK: - Version
 
-let kAppVersion = "1.5.1"
+let kAppVersion = "1.5.2"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -71,6 +71,23 @@ struct CursorState {
     var x: Int = 0
     var y: Int = 0
     var pendingWrap: Bool = false
+}
+
+// MARK: - URLSession Async Helper
+
+extension URLSession {
+    /// Async wrapper for dataTask — compatible with macOS 11+.
+    func fetchData(for request: URLRequest) async throws -> Data {
+        try await withCheckedThrowingContinuation { cont in
+            self.dataTask(with: request) { data, response, error in
+                if let error = error { cont.resume(throwing: error); return }
+                guard let data = data else {
+                    cont.resume(throwing: URLError(.badServerResponse)); return
+                }
+                cont.resume(returning: data)
+            }.resume()
+        }
+    }
 }
 
 // MARK: - Localization
@@ -8064,41 +8081,42 @@ class SettingsOverlay: NSView {
         sendBtn.onClick = { [weak self] in
             let msg = textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !msg.isEmpty else { return }
-            // Send directly via /usr/sbin/sendmail (built into macOS)
             let to = "l.ersen@icloud.com"
             let subject = "SystemTrayTerminal Feedback"
             let hostname = Host.current().localizedName ?? "SystemTrayTerminal-user"
             let email = "From: SystemTrayTerminal@\(hostname)\r\nTo: \(to)\r\nSubject: \(subject)\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n\(msg)"
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/sbin/sendmail")
-            proc.arguments = ["-t"]
-            let pipe = Pipe()
-            proc.standardInput = pipe
-            proc.standardOutput = FileHandle.nullDevice
-            proc.standardError = FileHandle.nullDevice
-            do {
-                try proc.run()
-                if let emailData = email.data(using: .utf8) {
-                    pipe.fileHandleForWriting.write(emailData)
-                }
-                pipe.fileHandleForWriting.closeFile()
-                proc.waitUntilExit()
-                if proc.terminationStatus == 0 {
-                    statusLbl.textColor = NSColor(calibratedRed: 0.3, green: 0.8, blue: 0.4, alpha: 1.0)
-                    statusLbl.stringValue = Loc.sent
-                    textView.string = ""
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            Task.detached {
+                let proc = Process()
+                proc.executableURL = URL(fileURLWithPath: "/usr/sbin/sendmail")
+                proc.arguments = ["-t"]
+                let pipe = Pipe()
+                proc.standardInput = pipe
+                proc.standardOutput = FileHandle.nullDevice
+                proc.standardError = FileHandle.nullDevice
+                do {
+                    try proc.run()
+                    if let emailData = email.data(using: .utf8) {
+                        pipe.fileHandleForWriting.write(emailData)
+                    }
+                    pipe.fileHandleForWriting.closeFile()
+                    proc.waitUntilExit()  // OK — background thread
+                    await MainActor.run {
+                        if proc.terminationStatus == 0 {
+                            statusLbl.textColor = NSColor(calibratedRed: 0.3, green: 0.8, blue: 0.4, alpha: 1.0)
+                            statusLbl.stringValue = Loc.sent
+                            textView.string = ""
+                            Task { try? await Task.sleep(for: .seconds(1.5)); self?.hideMessagePopup() }
+                        } else {
+                            Self.openMailto(msg)
+                            self?.hideMessagePopup()
+                        }
+                    }
+                } catch {
+                    await MainActor.run {
+                        Self.openMailto(msg)
                         self?.hideMessagePopup()
                     }
-                } else {
-                    // Fallback to mailto
-                    Self.openMailto(msg)
-                    self?.hideMessagePopup()
                 }
-            } catch {
-                // Fallback to mailto
-                Self.openMailto(msg)
-                self?.hideMessagePopup()
             }
         }
         popup.addSubview(sendBtn)
@@ -8887,120 +8905,74 @@ class GitHubClient {
 
     // MARK: - API Calls
 
-    func fetchUser(completion: @escaping (String?) -> Void) {
-        apiGet(path: "/user") { [weak self] json in
-            let dict = json as? [String: Any]
-            self?.username = dict?["login"] as? String
-            DispatchQueue.main.async { completion(self?.username) }
+    func fetchUser() async -> String? {
+        guard let json = try? await apiGet(path: "/user") as? [String: Any] else { return nil }
+        username = json["login"] as? String
+        return username
+    }
+
+    func fetchPRs(owner: String, repo: String) async -> [(number: Int, title: String, author: String)] {
+        guard let arr = try? await apiGet(path: "/repos/\(owner)/\(repo)/pulls?state=open&per_page=10") as? [[String: Any]] else { return [] }
+        return arr.compactMap { item in
+            guard let num = item["number"] as? Int,
+                  let title = item["title"] as? String else { return nil }
+            let author = (item["user"] as? [String: Any])?["login"] as? String ?? "?"
+            return (num, title, author)
         }
     }
 
-    func fetchPRs(owner: String, repo: String, completion: @escaping ([(number: Int, title: String, author: String)]) -> Void) {
-        apiGet(path: "/repos/\(owner)/\(repo)/pulls?state=open&per_page=10") { jsonAny in
-            guard let arr = jsonAny as? [[String: Any]] else {
-                DispatchQueue.main.async { completion([]) }
-                return
-            }
-            let prs: [(Int, String, String)] = arr.compactMap { item in
-                guard let num = item["number"] as? Int,
-                      let title = item["title"] as? String else { return nil }
-                let author = (item["user"] as? [String: Any])?["login"] as? String ?? "?"
-                return (num, title, author)
-            }
-            DispatchQueue.main.async { completion(prs) }
+    func fetchRemoteCommits(owner: String, repo: String, branch: String) async -> [(hash: String, message: String)] {
+        guard let arr = try? await apiGet(path: "/repos/\(owner)/\(repo)/commits?sha=\(branch)&per_page=8") as? [[String: Any]] else { return [] }
+        return arr.compactMap { item in
+            guard let sha = item["sha"] as? String,
+                  let commit = item["commit"] as? [String: Any],
+                  let msg = commit["message"] as? String else { return nil }
+            let shortSha = String(sha.prefix(7))
+            let firstLine = msg.split(separator: "\n").first.map(String.init) ?? msg
+            return (shortSha, firstLine)
         }
     }
 
-    func fetchRemoteCommits(owner: String, repo: String, branch: String, completion: @escaping ([(hash: String, message: String)]) -> Void) {
-        apiGet(path: "/repos/\(owner)/\(repo)/commits?sha=\(branch)&per_page=8") { jsonAny in
-            guard let arr = jsonAny as? [[String: Any]] else {
-                DispatchQueue.main.async { completion([]) }
-                return
-            }
-            let commits: [(String, String)] = arr.compactMap { item in
-                guard let sha = item["sha"] as? String,
-                      let commit = item["commit"] as? [String: Any],
-                      let msg = commit["message"] as? String else { return nil }
-                let shortSha = String(sha.prefix(7))
-                let firstLine = msg.split(separator: "\n").first.map(String.init) ?? msg
-                return (shortSha, firstLine)
-            }
-            DispatchQueue.main.async { completion(commits) }
+    func fetchWorkflowRuns(owner: String, repo: String) async -> [(name: String, status: String, conclusion: String?, branch: String, htmlURL: String)] {
+        guard let dict = try? await apiGet(path: "/repos/\(owner)/\(repo)/actions/runs?per_page=5") as? [String: Any],
+              let runs = dict["workflow_runs"] as? [[String: Any]] else { return [] }
+        return runs.compactMap { run in
+            guard let name = run["name"] as? String,
+                  let status = run["status"] as? String,
+                  let branch = run["head_branch"] as? String,
+                  let htmlURL = run["html_url"] as? String else { return nil }
+            return (name, status, run["conclusion"] as? String, branch, htmlURL)
         }
     }
 
-    private func apiGet(path: String, completion: @escaping (Any?) -> Void) {
-        guard let token = token, let url = URL(string: "https://api.github.com\(path)") else {
-            completion(nil); return
-        }
+    func fetchRemoteDataIfNeeded(cwd: String, branch: String) async {
+        guard isAuthenticated else { return }
+        guard Date().timeIntervalSince(cache.lastFetch) >= cacheTTL else { return }
+        guard let (owner, repo) = parseRemoteURL(cwd: cwd) else { return }
+
+        async let prs = fetchPRs(owner: owner, repo: repo)
+        async let commits = fetchRemoteCommits(owner: owner, repo: repo, branch: branch)
+        async let runs = fetchWorkflowRuns(owner: owner, repo: repo)
+        let (p, c, r) = await (prs, commits, runs)
+        cache.pullRequests = p
+        cache.remoteCommits = c
+        cache.workflowRuns = r
+        cache.lastFetch = Date()
+    }
+
+    private func apiGet(path: String) async throws -> Any? {
+        guard let token = token, let url = URL(string: "https://api.github.com\(path)") else { return nil }
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-
-        URLSession.shared.dataTask(with: request) { data, response, _ in
-            guard let data = data else { completion(nil); return }
-            if let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 401 {
-                completion(nil); return
-            }
-            let json = try? JSONSerialization.jsonObject(with: data)
-            completion(json)
-        }.resume()
+        let data = try await URLSession.shared.fetchData(for: request)
+        return try? JSONSerialization.jsonObject(with: data)
     }
 
-    func fetchWorkflowRuns(owner: String, repo: String, completion: @escaping ([(name: String, status: String, conclusion: String?, branch: String, htmlURL: String)]) -> Void) {
-        apiGet(path: "/repos/\(owner)/\(repo)/actions/runs?per_page=5") { json in
-            guard let dict = json as? [String: Any],
-                  let runs = dict["workflow_runs"] as? [[String: Any]] else {
-                DispatchQueue.main.async { completion([]) }
-                return
-            }
-            let result = runs.compactMap { run -> (name: String, status: String, conclusion: String?, branch: String, htmlURL: String)? in
-                guard let name = run["name"] as? String,
-                      let status = run["status"] as? String,
-                      let branch = run["head_branch"] as? String,
-                      let htmlURL = run["html_url"] as? String else { return nil }
-                let conclusion = run["conclusion"] as? String
-                return (name, status, conclusion, branch, htmlURL)
-            }
-            DispatchQueue.main.async { completion(result) }
-        }
-    }
-
-    func fetchRemoteDataIfNeeded(cwd: String, branch: String, completion: @escaping () -> Void) {
-        guard isAuthenticated else { completion(); return }
-        if Date().timeIntervalSince(cache.lastFetch) < cacheTTL { completion(); return }
-
-        guard let (owner, repo) = parseRemoteURL(cwd: cwd) else { completion(); return }
-        let group = DispatchGroup()
-
-        group.enter()
-        fetchPRs(owner: owner, repo: repo) { [weak self] prs in
-            self?.cache.pullRequests = prs
-            group.leave()
-        }
-
-        group.enter()
-        fetchRemoteCommits(owner: owner, repo: repo, branch: branch) { [weak self] commits in
-            self?.cache.remoteCommits = commits
-            group.leave()
-        }
-
-        group.enter()
-        fetchWorkflowRuns(owner: owner, repo: repo) { [weak self] runs in
-            self?.cache.workflowRuns = runs
-            group.leave()
-        }
-
-        group.notify(queue: .main) { [weak self] in
-            self?.cache.lastFetch = Date()
-            completion()
-        }
-    }
-
-    func createRepo(name: String, isPrivate: Bool, completion: @escaping (Bool, String?) -> Void) {
+    func createRepo(name: String, isPrivate: Bool) async -> (Bool, String?) {
         guard let token = token,
               let url = URL(string: "https://api.github.com/user/repos") else {
-            completion(false, "Nicht angemeldet"); return
+            return (false, "Nicht angemeldet")
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -9008,22 +8980,20 @@ class GitHubClient {
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         let body: [String: Any] = ["name": name, "private": isPrivate, "auto_init": false]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            guard let data = data, let http = response as? HTTPURLResponse else {
-                DispatchQueue.main.async { completion(false, error?.localizedDescription ?? "Netzwerkfehler") }
-                return
-            }
-            if http.statusCode == 201 {
-                // Parse clone_url from response
+        return await withCheckedContinuation { cont in
+            URLSession.shared.dataTask(with: request) { data, response, error in
+                guard let data = data, let http = response as? HTTPURLResponse else {
+                    cont.resume(returning: (false, error?.localizedDescription ?? "Netzwerkfehler"))
+                    return
+                }
                 let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-                let cloneURL = json?["clone_url"] as? String
-                DispatchQueue.main.async { completion(true, cloneURL) }
-            } else {
-                let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-                let msg = json?["message"] as? String ?? "Error \(http.statusCode)"
-                DispatchQueue.main.async { completion(false, msg) }
-            }
-        }.resume()
+                if http.statusCode == 201, let cloneURL = json?["clone_url"] as? String {
+                    cont.resume(returning: (true, cloneURL))
+                } else {
+                    cont.resume(returning: (false, json?["message"] as? String ?? "Error \(http.statusCode)"))
+                }
+            }.resume()
+        }
     }
 
     func logout() {
@@ -9088,7 +9058,7 @@ struct AIUsageData: Codable {
     let fetchedAt: Date
 }
 
-class AIUsageManager {
+class AIUsageManager: @unchecked Sendable {
     static let shared = AIUsageManager()
     private static let usageURL = "https://api.anthropic.com/api/oauth/usage"
 
@@ -9148,7 +9118,7 @@ class AIUsageManager {
         guard let token = readToken() else {
             debugLog("No token found — stopping polling")
             stopPolling()
-            DispatchQueue.main.async { self.onUpdate?(nil) }
+            onUpdate?(nil)
             return
         }
         debugLog("Token loaded (\(token.count) chars), fetching...")
@@ -9156,33 +9126,41 @@ class AIUsageManager {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+        Task { [weak self] in
             guard let self = self else { return }
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            if let error = error { self.debugLog("Network error: \(error.localizedDescription)") }
-            self.debugLog("HTTP \(statusCode)")
-            if let data = data, let body = String(data: data, encoding: .utf8) {
-                self.debugLog("Response: \(String(body.prefix(500)))")
+            do {
+                let (data, response): (Data?, URLResponse?) = try await withCheckedThrowingContinuation { cont in
+                    URLSession.shared.dataTask(with: request) { data, response, error in
+                        if let error = error { cont.resume(throwing: error); return }
+                        cont.resume(returning: (data, response))
+                    }.resume()
+                }
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                self.debugLog("HTTP \(statusCode)")
+                if let data = data, let body = String(data: data, encoding: .utf8) {
+                    self.debugLog("Response: \(String(body.prefix(500)))")
+                }
+                self.lastStatusCode = statusCode
+                // Auth errors → clear badge + reset token cache so next poll re-reads Keychain
+                // (Claude Code rotates OAuth tokens; cached token becomes stale over time)
+                if statusCode == 401 || statusCode == 403 {
+                    self.cachedToken = nil
+                    self.tokenChecked = false
+                    DispatchQueue.main.async { self.onUpdate?(nil) }
+                    return
+                }
+                // Transient errors (429, network, 5xx) → keep last data, badge stays green
+                guard let data = data, statusCode == 200,
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+                let result = self.parseUsageJSON(json)
+                DispatchQueue.main.async {
+                    self.latestData = result
+                    self.onUpdate?(result)
+                }
+            } catch {
+                self.debugLog("Network error: \(error.localizedDescription)")
             }
-            DispatchQueue.main.async { self.lastStatusCode = statusCode }
-            // Auth errors → clear badge + reset token cache so next poll re-reads Keychain
-            // (Claude Code rotates OAuth tokens; cached token becomes stale over time)
-            if statusCode == 401 || statusCode == 403 {
-                self.cachedToken = nil
-                self.tokenChecked = false
-                DispatchQueue.main.async { self.onUpdate?(nil) }
-                return
-            }
-            // Transient errors (429, network, 5xx) → keep last data, badge stays green
-            guard let data = data, statusCode == 200,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else { return }
-            let result = self.parseUsageJSON(json)
-            DispatchQueue.main.async {
-                self.latestData = result
-                self.onUpdate?(result)
-            }
-        }.resume()
+        }
     }
 
     private func parseCategory(_ json: [String: Any]?, key: String) -> AIUsageCategory? {
@@ -9965,8 +9943,9 @@ class GitPanelView: NSView {
         NotificationCenter.default.addObserver(self, selector: #selector(refreshLanguage),
                                                name: .appLanguageChanged, object: nil)
         if github.isAuthenticated {
-            github.fetchUser { [weak self] _ in
-                DispatchQueue.main.async { self?.updateGithubCard() }
+            Task { [weak self] in
+                _ = await self?.github.fetchUser()
+                self?.updateGithubCard()
             }
         }
     }
@@ -10609,88 +10588,81 @@ class GitPanelView: NSView {
         guard !isRefreshing else { return }
         isRefreshing = true
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task(priority: .userInitiated) { [weak self] in
             guard let self = self else { return }
 
-            // 1. Is git repo?
-            let topLevel = self.runGit(["rev-parse", "--show-toplevel"], cwd: cwd)
-            let isRepo = topLevel != nil
+            // Bridge to DispatchQueue.global for blocking git subprocesses
+            typealias GitResult = (isRepo: Bool, branch: String, hasRemote: Bool,
+                                   ahead: Int, behind: Int,
+                                   entries: [(path: String, x: Character, y: Character, attr: NSAttributedString)],
+                                   projectName: String)
+            let result: GitResult = await withCheckedContinuation { cont in
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    guard let self = self else { return }
+                    let topLevel = self.runGit(["rev-parse", "--show-toplevel"], cwd: cwd)
+                    let isRepo = topLevel != nil
+                    let branch = isRepo ? (self.runGit(["branch", "--show-current"], cwd: cwd) ?? "main") : ""
+                    let remoteURL = isRepo ? self.runGit(["remote", "get-url", "origin"], cwd: cwd) : nil
+                    let hasRemote = remoteURL != nil
 
-            // 2. Branch
-            let branch = isRepo ? (self.runGit(["branch", "--show-current"], cwd: cwd) ?? "main") : ""
+                    var aheadCount = 0, behindCount = 0
+                    if hasRemote, let ab = self.runGit(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"], cwd: cwd) {
+                        let parts = ab.split(separator: "\t")
+                        if parts.count == 2 { aheadCount = Int(parts[0]) ?? 0; behindCount = Int(parts[1]) ?? 0 }
+                    }
 
-            // 3. Remote exists?
-            let remoteURL = isRepo ? self.runGit(["remote", "get-url", "origin"], cwd: cwd) : nil
-            let hasRemote = remoteURL != nil
-
-            // 4. Ahead / behind (only if remote)
-            var aheadCount = 0, behindCount = 0
-            if hasRemote, let ab = self.runGit(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"], cwd: cwd) {
-                let parts = ab.split(separator: "\t")
-                if parts.count == 2 {
-                    aheadCount = Int(parts[0]) ?? 0
-                    behindCount = Int(parts[1]) ?? 0
+                    var entries: [(path: String, x: Character, y: Character, attr: NSAttributedString)] = []
+                    if isRepo, let status = self.runGit(["status", "--porcelain=v1"], cwd: cwd) {
+                        for line in status.split(separator: "\n", omittingEmptySubsequences: false) {
+                            guard line.count >= 3 else { continue }
+                            let x = line[line.startIndex]
+                            let y = line[line.index(line.startIndex, offsetBy: 1)]
+                            let file = String(line.dropFirst(3))
+                            let (tag, tagColor, fileColor): (String, NSColor, NSColor)
+                            if x == "?" {
+                                (tag, tagColor, fileColor) = ("NEU", NSColor(calibratedWhite: 0.45, alpha: 1.0), NSColor(calibratedWhite: 0.6, alpha: 1.0))
+                            } else if x == "D" || y == "D" {
+                                (tag, tagColor, fileColor) = ("DELETED", NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.4, alpha: 0.8), NSColor(calibratedRed: 0.8, green: 0.5, blue: 0.5, alpha: 0.8))
+                            } else if x == "U" || y == "U" {
+                                (tag, tagColor, fileColor) = ("KONFLIKT", NSColor(calibratedRed: 1.0, green: 0.35, blue: 0.35, alpha: 1.0), NSColor(calibratedRed: 1.0, green: 0.5, blue: 0.5, alpha: 1.0))
+                            } else if "MADRC".contains(x) && x != " " && "MD".contains(y) && y != " " {
+                                (tag, tagColor, fileColor) = ("BEREIT+MOD", NSColor(calibratedRed: 0.5, green: 0.85, blue: 0.55, alpha: 1.0), NSColor(calibratedRed: 0.9, green: 0.75, blue: 0.3, alpha: 1.0))
+                            } else if "MADRC".contains(x) && x != " " {
+                                (tag, tagColor, fileColor) = ("BEREIT", NSColor(calibratedRed: 0.4, green: 0.85, blue: 0.45, alpha: 1.0), NSColor(calibratedRed: 0.5, green: 0.8, blue: 0.55, alpha: 1.0))
+                            } else {
+                                (tag, tagColor, fileColor) = ("MODIFIED", NSColor(calibratedRed: 0.95, green: 0.7, blue: 0.25, alpha: 1.0), NSColor(calibratedRed: 0.85, green: 0.7, blue: 0.4, alpha: 1.0))
+                            }
+                            let attr = NSMutableAttributedString()
+                            attr.append(NSAttributedString(string: tag, attributes: [
+                                .foregroundColor: tagColor, .font: NSFont.monospacedSystemFont(ofSize: 8, weight: .bold)
+                            ]))
+                            attr.append(NSAttributedString(string: "  \((file as NSString).lastPathComponent)", attributes: [
+                                .foregroundColor: fileColor, .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+                            ]))
+                            entries.append((path: file, x: x, y: y, attr: attr))
+                        }
+                    }
+                    let projectName = (cwd as NSString).lastPathComponent
+                    cont.resume(returning: (isRepo, branch, hasRemote, aheadCount, behindCount, entries, projectName))
                 }
             }
 
-            // 5. Changed files
-            var entries: [(path: String, x: Character, y: Character, attr: NSAttributedString)] = []
-            if isRepo, let status = self.runGit(["status", "--porcelain=v1"], cwd: cwd) {
-                for line in status.split(separator: "\n", omittingEmptySubsequences: false) {
-                    guard line.count >= 3 else { continue }
-                    let x = line[line.startIndex]
-                    let y = line[line.index(line.startIndex, offsetBy: 1)]
-                    let file = String(line.dropFirst(3))
+            // UI updates back on main (Task inherits caller context)
+            self.isRefreshing = false
+            self.isGitRepo = result.isRepo
+            self.currentBranch = result.branch
+            self.ahead = result.ahead
+            self.behind = result.behind
+            self.hasRemote = result.hasRemote
+            self.fileEntries = result.entries
+            self.updateLayout(projectName: result.projectName)
+            self.refreshGithubStatus(cwd: cwd)
 
-                    let (tag, tagColor, fileColor): (String, NSColor, NSColor)
-                    if x == "?" {
-                        (tag, tagColor, fileColor) = ("NEU", NSColor(calibratedWhite: 0.45, alpha: 1.0), NSColor(calibratedWhite: 0.6, alpha: 1.0))
-                    } else if x == "D" || y == "D" {
-                        (tag, tagColor, fileColor) = ("DELETED", NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.4, alpha: 0.8), NSColor(calibratedRed: 0.8, green: 0.5, blue: 0.5, alpha: 0.8))
-                    } else if x == "U" || y == "U" {
-                        (tag, tagColor, fileColor) = ("KONFLIKT", NSColor(calibratedRed: 1.0, green: 0.35, blue: 0.35, alpha: 1.0), NSColor(calibratedRed: 1.0, green: 0.5, blue: 0.5, alpha: 1.0))
-                    } else if "MADRC".contains(x) && x != " " && "MD".contains(y) && y != " " {
-                        (tag, tagColor, fileColor) = ("BEREIT+MOD", NSColor(calibratedRed: 0.5, green: 0.85, blue: 0.55, alpha: 1.0), NSColor(calibratedRed: 0.9, green: 0.75, blue: 0.3, alpha: 1.0))
-                    } else if "MADRC".contains(x) && x != " " {
-                        (tag, tagColor, fileColor) = ("BEREIT", NSColor(calibratedRed: 0.4, green: 0.85, blue: 0.45, alpha: 1.0), NSColor(calibratedRed: 0.5, green: 0.8, blue: 0.55, alpha: 1.0))
-                    } else {
-                        (tag, tagColor, fileColor) = ("MODIFIED", NSColor(calibratedRed: 0.95, green: 0.7, blue: 0.25, alpha: 1.0), NSColor(calibratedRed: 0.85, green: 0.7, blue: 0.4, alpha: 1.0))
-                    }
-
-                    let attr = NSMutableAttributedString()
-                    attr.append(NSAttributedString(string: tag, attributes: [
-                        .foregroundColor: tagColor, .font: NSFont.monospacedSystemFont(ofSize: 8, weight: .bold)
-                    ]))
-                    attr.append(NSAttributedString(string: "  \((file as NSString).lastPathComponent)", attributes: [
-                        .foregroundColor: fileColor, .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                    ]))
-                    entries.append((path: file, x: x, y: y, attr: attr))
-                }
-            }
-
-            // 6. Project name from cwd
-            let projectName = (cwd as NSString).lastPathComponent
-
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.isRefreshing = false
-                self.isGitRepo = isRepo
-                self.currentBranch = branch
-                self.ahead = aheadCount
-                self.behind = behindCount
-                self.hasRemote = hasRemote
-                self.fileEntries = entries
-
-                self.updateLayout(projectName: projectName)
-                self.refreshGithubStatus(cwd: cwd)
-
-                // Intervall: 3s in Repos, 30s außerhalb
-                let newInterval: TimeInterval = isRepo ? 3.0 : 30.0
-                if let t = self.refreshTimer, abs(t.timeInterval - newInterval) > 0.1 {
-                    self.refreshTimer?.invalidate()
-                    self.refreshTimer = Timer.scheduledTimer(withTimeInterval: newInterval, repeats: true) { [weak self] _ in
-                        self?.refresh()
-                    }
+            let newInterval: TimeInterval = result.isRepo ? 3.0 : 30.0
+            if let t = self.refreshTimer, abs(t.timeInterval - newInterval) > 0.1 {
+                self.refreshTimer?.invalidate()
+                self.refreshTimer = Timer.scheduledTimer(withTimeInterval: newInterval, repeats: true) { [weak self] _ in
+                    self?.refresh()
                 }
             }
         }
@@ -10766,16 +10738,20 @@ class GitPanelView: NSView {
             args = ["diff", filePath]
         }
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task(priority: .userInitiated) { [weak self] in
             guard let self = self else { return }
-            let diffOut = self.runGit(args, cwd: self.lastCwd) ?? "No diff available"
-            DispatchQueue.main.async {
-                let diffView = self.makeDiffView(diffOut)
-                if let idx = self.filesStack.arrangedSubviews.firstIndex(where: { ($0 as? ClickableFileRow)?.filePath == filePath }) {
-                    self.filesStack.insertArrangedSubview(diffView, at: idx + 1)
+            let cwd = self.lastCwd
+            let diffOut: String = await withCheckedContinuation { cont in
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    guard let self = self else { cont.resume(returning: "No diff available"); return }
+                    cont.resume(returning: self.runGit(args, cwd: cwd) ?? "No diff available")
                 }
-                self.currentDiffView = diffView
             }
+            let diffView = self.makeDiffView(diffOut)
+            if let idx = self.filesStack.arrangedSubviews.firstIndex(where: { ($0 as? ClickableFileRow)?.filePath == filePath }) {
+                self.filesStack.insertArrangedSubview(diffView, at: idx + 1)
+            }
+            self.currentDiffView = diffView
         }
     }
 
@@ -10974,8 +10950,9 @@ class GitPanelView: NSView {
         tokenSaveBtn.title = Loc.checking
         tokenSaveBtn.isEnabled = false
         github.setToken(value)
-        github.fetchUser { [weak self] username in
+        Task { [weak self] in
             guard let self = self else { return }
+            let username = await self.github.fetchUser()
             if username != nil {
                 self.tokenField.stringValue = ""
                 self.updateGithubCard()
@@ -11047,25 +11024,23 @@ class GitPanelView: NSView {
         let branch = currentBranch.isEmpty ? "main" : currentBranch
         let isPrivate = repoIsPrivate
 
-        github.createRepo(name: name, isPrivate: isPrivate) { [weak self] success, cloneURLOrError in
+        Task { [weak self] in
             guard let self = self else { return }
+            let (success, cloneURLOrError) = await self.github.createRepo(name: name, isPrivate: isPrivate)
             if success, let cloneURL = cloneURLOrError {
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let remoteAdd = self.runGitAction(["remote", "add", "origin", cloneURL], cwd: cwd)
-                    if !remoteAdd.success {
-                        // remote may already exist — try updating it instead
-                        _ = self.runGitAction(["remote", "set-url", "origin", cloneURL], cwd: cwd)
-                    }
-                    let push = self.runGitAction(["push", "-u", "origin", branch], cwd: cwd)
-                    DispatchQueue.main.async {
-                        self.repoCreateBtn.isEnabled = true
-                        self.repoCreateBtn.title = Loc.createAndUpload
-                        self.cancelNewRepo()
-                        self.showFeedback(push.success ? Loc.projectCreated : "Repo created, push failed: \(push.output)", success: push.success)
-                        self.github.cache.lastFetch = .distantPast
-                        self.refresh()
+                let push: (success: Bool, output: String) = await withCheckedContinuation { cont in
+                    DispatchQueue.global(qos: .userInitiated).async { [self] in
+                        let r = self.runGitAction(["remote", "add", "origin", cloneURL], cwd: cwd)
+                        if !r.success { _ = self.runGitAction(["remote", "set-url", "origin", cloneURL], cwd: cwd) }
+                        cont.resume(returning: self.runGitAction(["push", "-u", "origin", branch], cwd: cwd))
                     }
                 }
+                self.repoCreateBtn.isEnabled = true
+                self.repoCreateBtn.title = Loc.createAndUpload
+                self.cancelNewRepo()
+                self.showFeedback(push.success ? Loc.projectCreated : "Repo created, push failed: \(push.output)", success: push.success)
+                self.github.cache.lastFetch = .distantPast
+                self.refresh()
             } else {
                 self.repoCreateBtn.isEnabled = true
                 self.repoCreateBtn.title = "✔  Create & Upload"
@@ -11098,7 +11073,7 @@ private extension NSButton {
 
 // MARK: - Chrome CDP Client
 
-class ChromeCDPClient {
+class ChromeCDPClient: @unchecked Sendable {
     static var debugPort: Int {
         UserDefaults.standard.integer(forKey: "webPickerBrowser") == 1 ? 9221 : 9222
     }
@@ -11145,36 +11120,28 @@ class ChromeCDPClient {
 
     /// Focuses a specific tab in Chrome via the HTTP /json/activate endpoint.
     /// This ensures Chrome shows the correct tab regardless of which tab was last active.
-    func activateTarget(targetId: String, completion: @escaping () -> Void) {
-        guard let url = URL(string: "http://localhost:\(Self.debugPort)/json/activate/\(targetId)") else {
-            completion(); return
-        }
-        URLSession.shared.dataTask(with: URLRequest(url: url)) { _, _, _ in
-            DispatchQueue.main.async { completion() }
-        }.resume()
+    func activateTarget(targetId: String) async {
+        guard let url = URL(string: "http://localhost:\(Self.debugPort)/json/activate/\(targetId)") else { return }
+        _ = try? await URLSession.shared.fetchData(for: URLRequest(url: url))
     }
 
     /// Prüft ob Chrome mit --remote-debugging-port läuft (2s Timeout)
-    func isAvailable(completion: @escaping (Bool) -> Void) {
+    func isAvailable() async -> Bool {
         let urlStr = "http://localhost:\(Self.debugPort)/json"
-        guard let url = URL(string: urlStr) else { completion(false); return }
+        guard let url = URL(string: urlStr) else { return false }
         var req = URLRequest(url: url)
         req.timeoutInterval = 2.0
-        URLSession.shared.dataTask(with: req) { _, response, error in
-            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-            let ok = code == 200
-            DispatchQueue.main.async { completion(ok) }
-        }.resume()
+        return (try? await URLSession.shared.fetchData(for: req)) != nil
     }
 
     /// Startet Chrome mit --remote-debugging-port, dann polling bis CDP bereit
-    func launchChrome(onStatus: ((String) -> Void)? = nil, completion: @escaping () -> Void) {
+    func launchChrome(onStatus: ((String) -> Void)? = nil) async {
         openChrome()
-        pollUntilAvailable(attempts: 14, interval: 0.7, onStatus: onStatus, completion: completion)
+        await pollUntilAvailable(attempts: 14, interval: 0.7, onStatus: onStatus)
     }
 
     /// Beendet laufendes Chrome und startet es neu mit --remote-debugging-port
-    func forceRelaunchChrome(onStatus: ((String) -> Void)? = nil, completion: @escaping () -> Void) {
+    func forceRelaunchChrome(onStatus: ((String) -> Void)? = nil) async {
         for name in ["Google Chrome", "Chromium", "Google Chrome Canary"] {
             let kill = Process()
             kill.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
@@ -11184,29 +11151,20 @@ class ChromeCDPClient {
             _ = try? kill.run()
         }
         onStatus?("Stopping Chrome...")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak self] in
-            guard let self = self else { return }
-            self.openChrome()
-            self.pollUntilAvailable(attempts: 16, interval: 0.8, onStatus: onStatus, completion: completion)
-        }
+        try? await Task.sleep(for: .seconds(1.8))
+        openChrome()
+        await pollUntilAvailable(attempts: 16, interval: 0.8, onStatus: onStatus)
     }
 
     /// Pollt isAvailable bis CDP antwortet oder Versuche erschöpft
-    private func pollUntilAvailable(attempts: Int, interval: TimeInterval,
-                                     onStatus: ((String) -> Void)?, completion: @escaping () -> Void) {
-        if attempts <= 0 { completion(); return }
-        isAvailable { [weak self] available in
-            guard let self = self else { return }
-            if available {
-                completion()
-            } else {
-                let dots = String(repeating: ".", count: 4 - (attempts % 4))
-                onStatus?("Waiting for Chrome\(dots)")
-                DispatchQueue.main.asyncAfter(deadline: .now() + interval) {
-                    self.pollUntilAvailable(attempts: attempts - 1, interval: interval,
-                                             onStatus: onStatus, completion: completion)
-                }
-            }
+    private func pollUntilAvailable(attempts: Int, interval: TimeInterval, onStatus: ((String) -> Void)?) async {
+        var remaining = attempts
+        while remaining > 0 {
+            if await isAvailable() { return }
+            let dots = String(repeating: ".", count: 4 - (remaining % 4))
+            onStatus?("Waiting for Chrome\(dots)")
+            try? await Task.sleep(for: .seconds(interval))
+            remaining -= 1
         }
     }
 
@@ -11235,83 +11193,69 @@ class ChromeCDPClient {
     }
 
     /// Gibt die WebSocket-URL des ersten aktiven Page-Tabs zurück
-    func getActiveTabWS(preferredTargetId: String? = nil, completion: @escaping (String?) -> Void) {
+    func getActiveTabWS(preferredTargetId: String? = nil) async -> String? {
         let urlStr = "http://localhost:\(Self.debugPort)/json/list"
-        guard let url = URL(string: urlStr) else { completion(nil); return }
+        guard let url = URL(string: urlStr) else { return nil }
         var req = URLRequest(url: url)
         req.timeoutInterval = 3.0
-        URLSession.shared.dataTask(with: req) { data, _, _ in
-            guard let data = data,
-                  let tabs = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-                DispatchQueue.main.async { completion(nil) }
-                return
-            }
-            let pages = tabs.filter {
-                guard ($0["type"] as? String) == "page",
-                      let tabURL = $0["url"] as? String else { return false }
-                // Skip Chrome-internal pages — JS injection doesn't work there
-                return tabURL.hasPrefix("http://") || tabURL.hasPrefix("https://") || tabURL == "about:blank"
-            }
-            // Prefer the previously connected tab if it still exists
-            if let preferred = preferredTargetId,
-               let tab = pages.first(where: { ($0["id"] as? String) == preferred }),
-               let wsURL = tab["webSocketDebuggerUrl"] as? String {
-                DispatchQueue.main.async { completion(wsURL) }
-                return
-            }
-            // Fall back to first available page tab
-            if let tab = pages.first, let wsURL = tab["webSocketDebuggerUrl"] as? String {
-                DispatchQueue.main.async { completion(wsURL) }
-            } else {
-                DispatchQueue.main.async { completion(nil) }
-            }
-        }.resume()
+        guard let data = try? await URLSession.shared.fetchData(for: req),
+              let tabs = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }
+        let pages = tabs.filter {
+            guard ($0["type"] as? String) == "page",
+                  let tabURL = $0["url"] as? String else { return false }
+            // Skip Chrome-internal pages — JS injection doesn't work there
+            return tabURL.hasPrefix("http://") || tabURL.hasPrefix("https://") || tabURL == "about:blank"
+        }
+        // Prefer the previously connected tab if it still exists
+        if let preferred = preferredTargetId,
+           let tab = pages.first(where: { ($0["id"] as? String) == preferred }),
+           let wsURL = tab["webSocketDebuggerUrl"] as? String {
+            return wsURL
+        }
+        // Fall back to first available page tab
+        return pages.first.flatMap { $0["webSocketDebuggerUrl"] as? String }
     }
 
     /// Verbindet via WebSocket mit einem Chrome-Tab
-    func connect(wsURL: String, completion: @escaping (Bool) -> Void) {
+    func connect(wsURL: String) async -> Bool {
         disconnect()
-        guard let url = URL(string: wsURL) else { completion(false); return }
+        guard let url = URL(string: wsURL) else { return false }
         wsSession = URLSession(configuration: .default)
         webSocketTask = wsSession?.webSocketTask(with: url)
         webSocketTask?.resume()
-        receiveLoop()
-        // Verify connectivity with a ping — don't optimistically assume success
-        var done = false
-        let task = webSocketTask
-        task?.sendPing { [weak self] error in
-            guard !done else { return }; done = true
-            DispatchQueue.main.async {
-                if error == nil { completion(true) }
-                else { self?.disconnect(); completion(false) }
+        Task { [weak self] in await self?.receiveLoop() }
+        return await withCheckedContinuation { cont in
+            var done = false
+            let task = self.webSocketTask
+            task?.sendPing { [weak self] error in
+                guard !done else { return }; done = true
+                if error != nil { self?.disconnect() }
+                cont.resume(returning: error == nil)
             }
-        }
-        // 3s hard timeout in case Chrome doesn't respond to ping
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-            guard !done else { return }; done = true
-            self?.disconnect(); completion(false)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                guard !done else { return }; done = true
+                self?.disconnect()
+                cont.resume(returning: false)
+            }
         }
     }
 
-    private func receiveLoop() {
-        webSocketTask?.receive { [weak self] result in
-            guard let self = self else { return }
-            switch result {
-            case .failure:
-                DispatchQueue.main.async { [weak self] in self?.onDisconnected?() }
-                return
-            case .success(let msg):
+    private func receiveLoop() async {
+        while let task = webSocketTask {
+            do {
+                let msg = try await task.receive()
                 if case .string(let text) = msg,
                    let data = text.data(using: .utf8),
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let id = json["id"] as? Int {
+                    let result = json["result"] as? [String: Any]
                     DispatchQueue.main.async { [weak self] in
-                        guard let self = self,
-                              let cb = self.pendingCallbacks.removeValue(forKey: id) else { return }
-                        cb(json["result"] as? [String: Any])
+                        self?.pendingCallbacks.removeValue(forKey: id)?(result)
                     }
                 }
-                self.receiveLoop()
+            } catch {
+                DispatchQueue.main.async { [weak self] in self?.onDisconnected?() }
+                return
             }
         }
     }
@@ -11393,60 +11337,36 @@ class ChromeCDPClient {
     }
 
     /// Creates a new blank tab via /json/new (works even when Chrome has no open windows)
-    func createBlankTab(completion: @escaping (String?) -> Void) {
-        guard let url = URL(string: "http://localhost:\(Self.debugPort)/json/new?about:blank") else {
-            DispatchQueue.main.async { completion(nil) }; return
-        }
+    func createBlankTab() async -> String? {
+        guard let url = URL(string: "http://localhost:\(Self.debugPort)/json/new?about:blank") else { return nil }
         var req = URLRequest(url: url)
         req.httpMethod = "PUT"
         req.timeoutInterval = 3.0
-        URLSession.shared.dataTask(with: req) { data, _, _ in
-            guard let data = data,
-                  let tab = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let wsURL = tab["webSocketDebuggerUrl"] as? String else {
-                DispatchQueue.main.async { completion(nil) }; return
-            }
-            DispatchQueue.main.async { completion(wsURL) }
-        }.resume()
+        guard let data = try? await URLSession.shared.fetchData(for: req),
+              let tab = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let wsURL = tab["webSocketDebuggerUrl"] as? String else { return nil }
+        return wsURL
     }
 
     /// Closes a Chrome tab via /json/close/{targetId}
-    func closeTab(targetId: String, completion: @escaping () -> Void) {
-        guard let url = URL(string: "http://localhost:\(Self.debugPort)/json/close/\(targetId)") else {
-            DispatchQueue.main.async { completion() }; return
-        }
+    func closeTab(targetId: String) async {
+        guard let url = URL(string: "http://localhost:\(Self.debugPort)/json/close/\(targetId)") else { return }
         var req = URLRequest(url: url)
         req.timeoutInterval = 3.0
-        URLSession.shared.dataTask(with: req) { _, _, _ in
-            DispatchQueue.main.async { completion() }
-        }.resume()
+        _ = try? await URLSession.shared.fetchData(for: req)
     }
 
     /// Returns hostname of the currently active page tab (e.g. "github.com")
-    func getTabHostname(targetId: String, completion: @escaping (String?) -> Void) {
-        guard let url = URL(string: "http://localhost:\(Self.debugPort)/json/list") else {
-            DispatchQueue.main.async { completion(nil) }; return
-        }
+    func getTabHostname(targetId: String) async -> String? {
+        guard let url = URL(string: "http://localhost:\(Self.debugPort)/json/list") else { return nil }
         var listReq = URLRequest(url: url)
         listReq.timeoutInterval = 3.0
-        URLSession.shared.dataTask(with: listReq) { data, _, _ in
-            guard let data = data,
-                  let tabs = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-                  let tab = tabs.first(where: { ($0["id"] as? String) == targetId }),
-                  let tabURL = tab["url"] as? String else {
-                DispatchQueue.main.async { completion(nil) }; return
-            }
-            // Extract hostname: "https://github.com/foo" → "github.com"
-            let hostname: String
-            if tabURL == "about:blank" || tabURL.isEmpty {
-                hostname = ""
-            } else if let host = URL(string: tabURL)?.host {
-                hostname = host
-            } else {
-                hostname = tabURL
-            }
-            DispatchQueue.main.async { completion(hostname) }
-        }.resume()
+        guard let data = try? await URLSession.shared.fetchData(for: listReq),
+              let tabs = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              let tab = tabs.first(where: { ($0["id"] as? String) == targetId }),
+              let tabURL = tab["url"] as? String else { return nil }
+        if tabURL == "about:blank" || tabURL.isEmpty { return "" }
+        return URL(string: tabURL)?.host ?? tabURL
     }
 }
 // MARK: - SSH Manager
@@ -12718,14 +12638,15 @@ class WebPickerSidebarView: NSView {
         titlePollTimer?.invalidate(); titlePollTimer = nil
         pickBtn.title = Loc.pickElement
         showConnectingState(Loc.connecting)
-        cdp.isAvailable { [weak self] available in
+        Task { [weak self] in
             guard let self = self else { return }
-            if available {
-                self.connectToTab()
+            if await self.cdp.isAvailable() {
+                DispatchQueue.main.async { self.connectToTab() }
             } else {
-                self.cdp.launchChrome(onStatus: { [weak self] msg in
-                    self?.showConnectingState(msg)
-                }) { [weak self] in self?.connectToTab() }
+                await self.cdp.launchChrome(onStatus: { [weak self] msg in
+                    DispatchQueue.main.async { self?.showConnectingState(msg) }
+                })
+                DispatchQueue.main.async { self.connectToTab() }
             }
         }
     }
@@ -12740,8 +12661,10 @@ class WebPickerSidebarView: NSView {
         let cleanup = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';});void 0;"
         if let tid = currentTargetId {
             cdp.evaluate(cleanup) { [weak self] _ in
-                self?.cdp.closeTab(targetId: tid) {
-                    self?.cdp.disconnect()
+                guard let self = self else { return }
+                Task {
+                    await self.cdp.closeTab(targetId: tid)
+                    self.cdp.disconnect()
                 }
             }
         } else {
@@ -12770,20 +12693,16 @@ class WebPickerSidebarView: NSView {
 
     private func connectToTab() {
         let preferred = UserDefaults.standard.string(forKey: "webPickerLastTargetId")
-        cdp.getActiveTabWS(preferredTargetId: preferred) { [weak self] wsURL in
+        Task { [weak self] in
             guard let self = self else { return }
-            if let wsURL = wsURL {
-                self.doConnect(to: wsURL)
+            if let wsURL = await self.cdp.getActiveTabWS(preferredTargetId: preferred) {
+                DispatchQueue.main.async { self.doConnect(to: wsURL) }
             } else {
-                self.showConnectingState(Loc.openingTab)
-                self.cdp.createBlankTab { [weak self] newWS in
-                    guard let self = self else { return }
-                    if let newWS = newWS {
-                        self.doConnect(to: newWS)
-                    } else {
-                        self.showDisconnectedState()
-                        self.setStatusText(Loc.chromeNotReachable)
-                    }
+                DispatchQueue.main.async { self.showConnectingState(Loc.openingTab) }
+                if let newWS = await self.cdp.createBlankTab() {
+                    DispatchQueue.main.async { self.doConnect(to: newWS) }
+                } else {
+                    DispatchQueue.main.async { self.showDisconnectedState(); self.setStatusText(Loc.chromeNotReachable) }
                 }
             }
         }
@@ -12811,39 +12730,46 @@ class WebPickerSidebarView: NSView {
         cdp.onDisconnected = { [weak self] in
             self?.handleUnexpectedDisconnect(message: Loc.connectionLost)
         }
-        cdp.connect(wsURL: wsURL) { [weak self] success in
+        Task { [weak self] in
             guard let self = self else { return }
-            if success {
-                self.isConnected = true
-                self.cdp.findManagedApp()
-                if let tid = self.currentTargetId {
-                    let h = Int(NSScreen.main?.frame.height ?? 900)
-                    // Small delay so Chrome is fully ready to accept window bounds
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-                        self?.cdp.setChromeWindowBounds(width: 777, height: h, left: 0, top: 0, targetId: tid)
+            let success = await self.cdp.connect(wsURL: wsURL)
+            DispatchQueue.main.async {
+                if success {
+                    self.isConnected = true
+                    self.cdp.findManagedApp()
+                    if let tid = self.currentTargetId {
+                        let h = Int(NSScreen.main?.frame.height ?? 900)
+                        // Small delay so Chrome is fully ready to accept window bounds
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                            self?.cdp.setChromeWindowBounds(width: 777, height: h, left: 0, top: 0, targetId: tid)
+                        }
                     }
+                    self.onConnected?()
+                    self.refreshTabTitle()
+                    self.startTitlePolling()
+                } else {
+                    self.showDisconnectedState()
+                    self.setStatusText(Loc.connectionFailed)
+                    self.scheduleTabSearch()
                 }
-                self.onConnected?()
-                self.refreshTabTitle()
-                self.startTitlePolling()
-            } else {
-                self.showDisconnectedState()
-                self.setStatusText(Loc.connectionFailed)
-                self.scheduleTabSearch()
             }
         }
     }
 
     private func refreshTabTitle() {
         guard let tid = currentTargetId else { return }
-        cdp.getTabHostname(targetId: tid) { [weak self] hostname in
-            guard let self = self, self.isConnected else { return }
-            if let hostname = hostname {
-                // hostname == "" means about:blank (still navigating), non-empty = real site
-                self.showConnectedState(hostname: hostname, navigating: hostname.isEmpty)
-            } else {
-                // nil = tab not found in /json/list — tab was closed externally
-                self.handleUnexpectedDisconnect(message: Loc.tabClosed)
+        Task { [weak self] in
+            guard let self = self else { return }
+            let hostname = await self.cdp.getTabHostname(targetId: tid)
+            DispatchQueue.main.async {
+                guard self.isConnected else { return }
+                if let hostname = hostname {
+                    // hostname == "" means about:blank (still navigating), non-empty = real site
+                    self.showConnectedState(hostname: hostname, navigating: hostname.isEmpty)
+                } else {
+                    // nil = tab not found in /json/list — tab was closed externally
+                    self.handleUnexpectedDisconnect(message: Loc.tabClosed)
+                }
             }
         }
     }
@@ -12874,8 +12800,10 @@ class WebPickerSidebarView: NSView {
     @objc private func openChromeInspect() {
         // Open chrome://inspect in the managed Chrome via CDP navigate, or fall back to NSWorkspace
         if isConnected, let tid = currentTargetId {
-            cdp.activateTarget(targetId: tid) { [weak self] in
-                _ = self?.cdp.managedApp?.activate(options: [])
+            Task { [weak self] in
+                guard let self = self else { return }
+                await self.cdp.activateTarget(targetId: tid)
+                _ = self.cdp.managedApp?.activate(options: [])
             }
             cdp.evaluate("window.open('chrome://inspect','_blank');void 0;") { _ in }
         } else {
@@ -14692,151 +14620,113 @@ class UpdateChecker {
     private var downloadTask: URLSessionDownloadTask?
     private var progressObservation: NSKeyValueObservation?
 
-    func checkForUpdate(completion: @escaping (Result<GitHubRelease?, Error>) -> Void) {
+    func checkForUpdate() async throws -> GitHubRelease? {
         let url = URL(string: "https://api.github.com/repos/LEVOGNE/SystemTrayTerminal/releases/latest")!
         var req = URLRequest(url: url)
         req.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
         req.timeoutInterval = 15
-
-        URLSession.shared.dataTask(with: req) { data, response, error in
-            if let error = error {
-                DispatchQueue.main.async { completion(.failure(error)) }
-                return
-            }
-            if let httpResp = response as? HTTPURLResponse, httpResp.statusCode != 200 {
-                DispatchQueue.main.async {
-                    completion(.failure(NSError(domain: "UpdateChecker", code: 0,
-                        userInfo: [NSLocalizedDescriptionKey: "Server returned HTTP \(httpResp.statusCode)"])))
+        return try await withCheckedThrowingContinuation { cont in
+            URLSession.shared.dataTask(with: req) { data, response, error in
+                if let error = error { cont.resume(throwing: error); return }
+                if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+                    cont.resume(throwing: NSError(domain: "UpdateChecker", code: 0,
+                        userInfo: [NSLocalizedDescriptionKey: "Server returned HTTP \(http.statusCode)"]))
+                    return
                 }
-                return
-            }
-            guard let data = data else {
-                DispatchQueue.main.async {
-                    completion(.failure(NSError(domain: "UpdateChecker", code: 0,
-                        userInfo: [NSLocalizedDescriptionKey: "No data received from server"])))
+                guard let data = data else {
+                    cont.resume(throwing: NSError(domain: "UpdateChecker", code: 0,
+                        userInfo: [NSLocalizedDescriptionKey: "No data received from server"]))
+                    return
                 }
-                return
-            }
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let tagName = json["tag_name"] as? String,
-                  let assets = json["assets"] as? [[String: Any]],
-                  let firstAsset = assets.first(where: {
-                      ($0["name"] as? String)?.hasSuffix(".zip") == true
-                  }),
-                  let urlStr = firstAsset["browser_download_url"] as? String,
-                  let downloadURL = URL(string: urlStr)
-            else {
-                DispatchQueue.main.async {
-                    completion(.failure(NSError(domain: "UpdateChecker", code: 0,
-                        userInfo: [NSLocalizedDescriptionKey: "Failed to parse release data from server"])))
+                guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let tagName = json["tag_name"] as? String,
+                      let assets = json["assets"] as? [[String: Any]],
+                      let firstAsset = assets.first(where: { ($0["name"] as? String)?.hasSuffix(".zip") == true }),
+                      let urlStr = firstAsset["browser_download_url"] as? String,
+                      let downloadURL = URL(string: urlStr)
+                else {
+                    cont.resume(throwing: NSError(domain: "UpdateChecker", code: 0,
+                        userInfo: [NSLocalizedDescriptionKey: "Failed to parse release data from server"]))
+                    return
                 }
-                return
-            }
-
-            // Look for a .sha256 sidecar asset (same name as zip + ".sha256")
-            let zipName = firstAsset["name"] as? String ?? ""
-            let sha256Asset = assets.first(where: { ($0["name"] as? String) == zipName + ".sha256" })
-            let checksumURL = (sha256Asset?["browser_download_url"] as? String).flatMap { URL(string: $0) }
-
-            if isNewerVersion(remote: tagName, local: kAppVersion) {
-                DispatchQueue.main.async {
-                    completion(.success(GitHubRelease(tagName: tagName, downloadURL: downloadURL, checksumURL: checksumURL)))
+                let zipName = firstAsset["name"] as? String ?? ""
+                let sha256Asset = assets.first(where: { ($0["name"] as? String) == zipName + ".sha256" })
+                let checksumURL = (sha256Asset?["browser_download_url"] as? String).flatMap { URL(string: $0) }
+                if isNewerVersion(remote: tagName, local: kAppVersion) {
+                    cont.resume(returning: GitHubRelease(tagName: tagName, downloadURL: downloadURL, checksumURL: checksumURL))
+                } else {
+                    cont.resume(returning: nil)
                 }
-            } else {
-                DispatchQueue.main.async { completion(.success(nil)) }
-            }
-        }.resume()
+            }.resume()
+        }
     }
 
     func downloadAndInstall(release: GitHubRelease,
-                            onProgress: @escaping (Double) -> Void,
-                            onComplete: @escaping (Result<Void, Error>) -> Void) {
+                            onProgress: @escaping @MainActor (Double) -> Void) async throws {
         // [P1] Verify HTTPS scheme — reject plain HTTP downloads
         guard release.downloadURL.scheme == "https" else {
-            onComplete(.failure(NSError(domain: "UpdateChecker", code: 0,
-                userInfo: [NSLocalizedDescriptionKey: "Download URL must use HTTPS"])))
-            return
+            throw NSError(domain: "UpdateChecker", code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "Download URL must use HTTPS"])
         }
         // [P0] Verify download URL is from a trusted GitHub host
         let host = release.downloadURL.host ?? ""
         guard allowedUpdateHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) else {
-            onComplete(.failure(NSError(domain: "UpdateChecker", code: 0,
-                userInfo: [NSLocalizedDescriptionKey: "Download URL from unexpected host: \(host)"])))
-            return
+            throw NSError(domain: "UpdateChecker", code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "Download URL from unexpected host: \(host)"])
         }
-        let task = URLSession.shared.downloadTask(with: release.downloadURL) { [weak self] tmpURL, _, error in
-            self?.progressObservation = nil
-            if let error = error {
-                DispatchQueue.main.async { onComplete(.failure(error)) }
-                return
+
+        // Download with progress observation via withCheckedThrowingContinuation
+        let zipPath: URL = try await withCheckedThrowingContinuation { [weak self] cont in
+            guard let self = self else {
+                cont.resume(throwing: URLError(.cancelled)); return
             }
-            guard let tmpURL = tmpURL else {
-                DispatchQueue.main.async {
-                    onComplete(.failure(NSError(domain: "UpdateChecker", code: 1,
-                                               userInfo: [NSLocalizedDescriptionKey: "Download failed"])))
+            let task = URLSession.shared.downloadTask(with: release.downloadURL) { tmpURL, _, error in
+                if let error = error { cont.resume(throwing: error); return }
+                guard let tmpURL = tmpURL else {
+                    cont.resume(throwing: NSError(domain: "UpdateChecker", code: 1,
+                                                  userInfo: [NSLocalizedDescriptionKey: "Download failed"]))
+                    return
                 }
-                return
+                let zipPath = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("SystemTrayTerminal_update_\(UUID().uuidString).zip")
+                do {
+                    try? FileManager.default.removeItem(at: zipPath)
+                    try FileManager.default.copyItem(at: tmpURL, to: zipPath)
+                    cont.resume(returning: zipPath)
+                } catch {
+                    cont.resume(throwing: error)
+                }
             }
-            // Copy to persistent temp location (URLSession tmp file gets deleted)
-            let zipPath = FileManager.default.temporaryDirectory
-                .appendingPathComponent("SystemTrayTerminal_update_\(UUID().uuidString).zip")
-            do {
+            self.progressObservation = task.observe(\.countOfBytesReceived) { t, _ in
+                guard t.countOfBytesExpectedToReceive > 0 else { return }
+                let pct = Double(t.countOfBytesReceived) / Double(t.countOfBytesExpectedToReceive)
+                Task { @MainActor in onProgress(pct) }
+            }
+            self.downloadTask = task
+            task.resume()
+        }
+
+        // [P0] Verify checksum sidecar (HTTPS + trusted host)
+        let trustedHosts = allowedUpdateHosts
+        if let checksumURL = release.checksumURL.flatMap({ url -> URL? in
+            let h = url.host ?? ""
+            guard url.scheme == "https",
+                  trustedHosts.contains(where: { h == $0 || h.hasSuffix("." + $0) })
+            else { return nil }
+            return url
+        }) {
+            let matches = try await verifyChecksum(zipPath: zipPath, checksumURL: checksumURL)
+            guard matches else {
                 try? FileManager.default.removeItem(at: zipPath)
-                try FileManager.default.copyItem(at: tmpURL, to: zipPath)
-            } catch {
-                DispatchQueue.main.async { onComplete(.failure(error)) }
-                return
-            }
-
-            // [P0] If a checksum sidecar was provided, verify before install
-            // [P2] Validate checksumURL with same HTTPS + host allowlist as downloadURL
-            let trustedHosts = self?.allowedUpdateHosts ?? []
-            let validChecksumURL: URL? = release.checksumURL.flatMap { url in
-                let host = url.host ?? ""
-                guard url.scheme == "https",
-                      trustedHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) })
-                else { return nil }
-                return url
-            }
-            if let checksumURL = validChecksumURL {
-                self?.verifyChecksum(zipPath: zipPath, checksumURL: checksumURL) { matches in
-                    guard matches else {
-                        DispatchQueue.main.async {
-                            onComplete(.failure(NSError(domain: "UpdateChecker", code: 15,
-                                userInfo: [NSLocalizedDescriptionKey: "SHA256 checksum mismatch — download may be corrupt or tampered"])))
-                        }
-                        try? FileManager.default.removeItem(at: zipPath)
-                        return
-                    }
-                    DispatchQueue.global(qos: .utility).async {
-                        self?.installUpdate(from: zipPath, completion: onComplete)
-                    }
-                }
-            } else {
-                // No checksum file in release — proceed without hash verification
-                DispatchQueue.global(qos: .utility).async {
-                    self?.installUpdate(from: zipPath, completion: onComplete)
-                }
+                throw NSError(domain: "UpdateChecker", code: 15,
+                    userInfo: [NSLocalizedDescriptionKey: "SHA256 checksum mismatch — download may be corrupt or tampered"])
             }
         }
 
-        progressObservation = task.observe(\.countOfBytesReceived) { t, _ in
-            guard t.countOfBytesExpectedToReceive > 0 else { return }
-            let pct = Double(t.countOfBytesReceived) / Double(t.countOfBytesExpectedToReceive)
-            DispatchQueue.main.async { onProgress(pct) }
-        }
-
-        downloadTask = task
-        task.resume()
+        try await installUpdate(from: zipPath)
     }
 
-    private func installUpdate(from zipPath: URL, completion: @escaping (Result<Void, Error>) -> Void) {
-        // Guard: semaphore below deadlocks if called from main — make it a hard crash instead of a silent hang
-        precondition(!Thread.isMainThread, "installUpdate must not run on the main thread")
-        // [P1] installUpdate runs on a background thread — dispatch all completion calls back to main
-        let complete: (Result<Void, Error>) -> Void = { result in
-            DispatchQueue.main.async { completion(result) }
-        }
+    private func installUpdate(from zipPath: URL) async throws {
         let fm = FileManager.default
         let extractDir = fm.temporaryDirectory.appendingPathComponent("SystemTrayTerminal_extract_\(UUID().uuidString)")
 
@@ -14848,22 +14738,19 @@ class UpdateChecker {
             try dittoProc.run()
             dittoProc.waitUntilExit()
         } catch {
-            complete(.failure(NSError(domain: "UpdateChecker", code: 2,
-                                     userInfo: [NSLocalizedDescriptionKey: "Failed to extract: \(error.localizedDescription)"])))
-            return
+            throw NSError(domain: "UpdateChecker", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to extract: \(error.localizedDescription)"])
         }
         guard dittoProc.terminationStatus == 0 else {
-            complete(.failure(NSError(domain: "UpdateChecker", code: 3,
-                                     userInfo: [NSLocalizedDescriptionKey: "ditto failed with exit code \(dittoProc.terminationStatus)"])))
-            return
+            throw NSError(domain: "UpdateChecker", code: 3,
+                          userInfo: [NSLocalizedDescriptionKey: "ditto failed with exit code \(dittoProc.terminationStatus)"])
         }
 
         // 2. Find .app in extracted contents
         guard let appBundle = findAppBundle(in: extractDir) else {
-            complete(.failure(NSError(domain: "UpdateChecker", code: 4,
-                                     userInfo: [NSLocalizedDescriptionKey: "No .app bundle found in archive"])))
             try? fm.removeItem(at: extractDir)
-            return
+            throw NSError(domain: "UpdateChecker", code: 4,
+                          userInfo: [NSLocalizedDescriptionKey: "No .app bundle found in archive"])
         }
 
         // Read Info.plist once for exec name + bundle ID check
@@ -14874,10 +14761,9 @@ class UpdateChecker {
         let execName = (plist?["CFBundleExecutable"] as? String) ?? "SystemTrayTerminal"
         let execPath = appBundle.appendingPathComponent("Contents/MacOS/\(execName)")
         guard fm.isExecutableFile(atPath: execPath.path) else {
-            complete(.failure(NSError(domain: "UpdateChecker", code: 5,
-                                     userInfo: [NSLocalizedDescriptionKey: "Invalid app bundle — no executable"])))
             try? fm.removeItem(at: extractDir)
-            return
+            throw NSError(domain: "UpdateChecker", code: 5,
+                          userInfo: [NSLocalizedDescriptionKey: "Invalid app bundle — no executable"])
         }
 
         // [P0] Verify bundle identifier — allow known migration: quickterminal → systemtrayterminal
@@ -14887,10 +14773,9 @@ class UpdateChecker {
            !currentBundleId.isEmpty, newBundleId != currentBundleId {
             let isMigration = (currentBundleId == knownMigration.0 && newBundleId == knownMigration.1)
             if !isMigration {
-                complete(.failure(NSError(domain: "UpdateChecker", code: 9,
-                                         userInfo: [NSLocalizedDescriptionKey: "Bundle identifier mismatch — aborting update"])))
                 try? fm.removeItem(at: extractDir)
-                return
+                throw NSError(domain: "UpdateChecker", code: 9,
+                              userInfo: [NSLocalizedDescriptionKey: "Bundle identifier mismatch — aborting update"])
             }
         }
 
@@ -14901,10 +14786,9 @@ class UpdateChecker {
 
         // Check write permission
         guard fm.isWritableFile(atPath: parentDir.path) else {
-            complete(.failure(NSError(domain: "UpdateChecker", code: 6,
-                                     userInfo: [NSLocalizedDescriptionKey: "No write permission at \(parentDir.path)"])))
             try? fm.removeItem(at: extractDir)
-            return
+            throw NSError(domain: "UpdateChecker", code: 6,
+                          userInfo: [NSLocalizedDescriptionKey: "No write permission at \(parentDir.path)"])
         }
 
         // 4. Move old .app to temp (rollback backup)
@@ -14912,10 +14796,9 @@ class UpdateChecker {
         do {
             try fm.moveItem(at: currentAppURL, to: backupPath)
         } catch {
-            complete(.failure(NSError(domain: "UpdateChecker", code: 7,
-                                     userInfo: [NSLocalizedDescriptionKey: "Failed to move old app: \(error.localizedDescription)"])))
             try? fm.removeItem(at: extractDir)
-            return
+            throw NSError(domain: "UpdateChecker", code: 7,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to move old app: \(error.localizedDescription)"])
         }
 
         // 5. Copy new .app to original path
@@ -14924,10 +14807,9 @@ class UpdateChecker {
         } catch {
             // Rollback
             try? fm.moveItem(at: backupPath, to: currentAppURL)
-            complete(.failure(NSError(domain: "UpdateChecker", code: 8,
-                                     userInfo: [NSLocalizedDescriptionKey: "Failed to install update, rolled back: \(error.localizedDescription)"])))
             try? fm.removeItem(at: extractDir)
-            return
+            throw NSError(domain: "UpdateChecker", code: 8,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to install update, rolled back: \(error.localizedDescription)"])
         }
 
         // 6. Remove quarantine
@@ -14941,20 +14823,15 @@ class UpdateChecker {
         try? fm.removeItem(at: extractDir)
         try? fm.removeItem(at: zipPath)
 
-        // 7. Save session before relaunch (semaphore avoids main.sync deadlock risk)
-        let sema = DispatchSemaphore(value: 0)
-        DispatchQueue.main.async {
+        // 7. Save session before relaunch — await MainActor instead of semaphore
+        await MainActor.run {
             if let delegate = NSApp.delegate as? AppDelegate { delegate.saveSession() }
-            sema.signal()
         }
-        sema.wait()
 
-        complete(.success(()))
-
-        // 9. Show SUCCESS toast for 3s, then relaunch + exit
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            // [P2] For .app bundles: use `open` directly and verify exit code before
-            //      deleting backup. `open` returns 0 quickly once the app is queued.
+        // 9. Schedule relaunch after 3s — caller shows SUCCESS toast in the meantime
+        Task { @MainActor [fm, currentAppPath, backupPath] in
+            try? await Task.sleep(for: .seconds(3))
+            // [P2] For .app bundles: use `open` directly and verify exit code before deleting backup.
             if currentAppPath.hasSuffix(".app") {
                 let openProc = Process()
                 openProc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
@@ -14963,7 +14840,6 @@ class UpdateChecker {
                     try openProc.run()
                     openProc.waitUntilExit()  // open exits quickly (≈ launch queued)
                     guard openProc.terminationStatus == 0 else {
-                        // open returned non-zero — relaunch failed; show error so user isn't left hanging
                         if let delegate = NSApp.delegate as? AppDelegate {
                             delegate.showGenericToast(badge: "ERROR", text: "Relaunch failed — please restart manually",
                                                       badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0),
@@ -14974,7 +14850,6 @@ class UpdateChecker {
                     try? fm.removeItem(at: backupPath)
                     exit(0)
                 } catch {
-                    // open() threw — relaunch failed; show error so user isn't left hanging
                     if let delegate = NSApp.delegate as? AppDelegate {
                         delegate.showGenericToast(badge: "ERROR", text: "Relaunch failed — please restart manually",
                                                   badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0),
@@ -14991,9 +14866,7 @@ class UpdateChecker {
                     try shellProc.run()
                     try? fm.removeItem(at: backupPath)
                     exit(0)
-                } catch {
-                    return
-                }
+                } catch { return }
             }
         }
     }
@@ -15002,36 +14875,36 @@ class UpdateChecker {
     /// Trust-anchor note: ZIP + SHA256 both come from the same GitHub release. A compromised
     /// GitHub account could manipulate both. The next hardening step is Apple code-signing
     /// (codesign --verify) or hosting the hash on a separate, independently controlled endpoint.
-    private func verifyChecksum(zipPath: URL, checksumURL: URL, completion: @escaping (Bool) -> Void) {
-        URLSession.shared.dataTask(with: checksumURL) { data, _, _ in
-            guard let data = data,
-                  let checksumStr = String(data: data, encoding: .utf8)?
-                      .trimmingCharacters(in: .whitespacesAndNewlines),
-                  let expectedHash = checksumStr.components(separatedBy: CharacterSet.whitespaces).first,
-                  !expectedHash.isEmpty
-            else {
-                completion(false)
-                return
+    private func verifyChecksum(zipPath: URL, checksumURL: URL) async throws -> Bool {
+        let data = try await URLSession.shared.fetchData(for: URLRequest(url: checksumURL))
+        guard let checksumStr = String(data: data, encoding: .utf8)?
+                  .trimmingCharacters(in: .whitespacesAndNewlines),
+              let expectedHash = checksumStr.components(separatedBy: CharacterSet.whitespaces).first,
+              !expectedHash.isEmpty
+        else { return false }
+        // shasum is a blocking subprocess — run off the calling thread
+        return await withCheckedContinuation { cont in
+            DispatchQueue.global(qos: .utility).async {
+                let proc = Process()
+                proc.executableURL = URL(fileURLWithPath: "/usr/bin/shasum")
+                proc.arguments = ["-a", "256", zipPath.path]
+                let pipe = Pipe()
+                proc.standardOutput = pipe
+                do {
+                    try proc.run()
+                    proc.waitUntilExit()
+                    guard proc.terminationStatus == 0 else { cont.resume(returning: false); return }
+                    let output = pipe.fileHandleForReading.readDataToEndOfFile()
+                    let actualHash = String(data: output, encoding: .utf8)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .components(separatedBy: CharacterSet.whitespaces)
+                        .first ?? ""
+                    cont.resume(returning: actualHash.lowercased() == expectedHash.lowercased())
+                } catch {
+                    cont.resume(returning: false)
+                }
             }
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/shasum")
-            proc.arguments = ["-a", "256", zipPath.path]
-            let pipe = Pipe()
-            proc.standardOutput = pipe
-            do {
-                try proc.run()
-                proc.waitUntilExit()
-                guard proc.terminationStatus == 0 else { completion(false); return }
-                let output = pipe.fileHandleForReading.readDataToEndOfFile()
-                let actualHash = String(data: output, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .components(separatedBy: CharacterSet.whitespaces)
-                    .first ?? ""
-                completion(actualHash.lowercased() == expectedHash.lowercased())
-            } catch {
-                completion(false)
-            }
-        }.resume()
+        }
     }
 
     private func findAppBundle(in directory: URL) -> URL? {
@@ -16843,6 +16716,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self, selector: #selector(systemAppearanceChanged),
             name: NSNotification.Name("AppleInterfaceThemeChangedNotification"), object: nil)
 
+        // Reposition docked window after system wake — tray-icon X/Y can shift after sleep.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(handleWakeFromSleep),
+            name: NSWorkspace.didWakeNotification, object: nil)
+
+        // Reposition when screen layout changes (monitor added/removed, resolution change).
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(handleScreenChange),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil)
+
         // Menu bar icon — custom drawn >_ prompt
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
@@ -16935,7 +16818,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let savedH = UserDefaults.standard.double(forKey: "windowHeight")
         let screenVis = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 780)
         let maxW = screenVis.width
-        let maxH = max(220, screenVis.height - 80)   // 80px buffer for tray bar + arrow gap
+        // visibleFrame already excludes the menu bar and Dock.
+        // The window sits at y = trayIcon.minY - 4 - windowHeight, and trayIcon.minY ≈ visibleFrame.maxY,
+        // so the only required headroom is the 4px gap — not 80px.
+        let maxH = max(220, screenVis.height - 4)
         let w: CGFloat = savedW > 100 ? min(CGFloat(savedW), maxW) : 860
         let h: CGFloat = savedH > 100 ? min(CGFloat(savedH), maxH) : 480
         // Persist the clamped values so a bad saved size doesn't re-emerge on next launch
@@ -17194,19 +17080,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.40) { [weak self] in
             guard let self = self, !self.isWindowDetached else { return }
-            // Restore saved docked position from previous session.
-            // Uses separate keys (dockedWindowX/Y) so the tray-icon fallback
-            // never causes a feedback loop.
+            // Restore saved docked X position from previous session.
+            // Y is NEVER restored — it is always recalculated from the live tray-icon
+            // position to prevent stale Y values after sleep/wake, screen changes, or
+            // tray-icon rearrangements causing a visible gap below the menu bar.
             let ud = UserDefaults.standard
+            // Clean up any stale dockedWindowY written by older app versions.
+            ud.removeObject(forKey: "dockedWindowY")
             let dx = ud.double(forKey: "dockedWindowX")
-            let dy = ud.double(forKey: "dockedWindowY")
             let dw = ud.double(forKey: "windowWidth")
             let dh = ud.double(forKey: "windowHeight")
-            if dx != 0 || dy != 0 {
+            if dx != 0 {
                 let sz = NSSize(width: dw > 0 ? CGFloat(dw) : self.window.frame.width,
                                 height: dh > 0 ? CGFloat(dh) : self.window.frame.height)
-                self.lastDockedFrame = NSRect(origin: NSPoint(x: CGFloat(dx), y: CGFloat(dy)),
-                                              size: sz)
+                // Y=0 placeholder — showWindowAnimated() only uses .origin.x from this frame.
+                self.lastDockedFrame = NSRect(origin: NSPoint(x: CGFloat(dx), y: 0), size: sz)
             }
             self.showWindowAnimated()
         }
@@ -17231,6 +17119,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if UserDefaults.standard.integer(forKey: "colorTheme") == 3 {
             applySetting(key: "colorTheme", value: 3)
             applySystemThemeAppearance(to: visualEffect)
+        }
+    }
+
+    @objc func handleScreenChange() {
+        // Screen layout changed (monitor connected/disconnected, resolution change).
+        // Wait 400ms for macOS to finish repositioning status-bar items, then reposition.
+        guard !isWindowDetached, window.isVisible else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.40) { [weak self] in
+            guard let self = self, !self.isWindowDetached, self.window.isVisible else { return }
+            self.repositionDockedWindow()
+        }
+    }
+
+    @objc func handleWakeFromSleep() {
+        // After sleep/wake, macOS can reposition status-bar items. Wait 400ms for the
+        // tray icon to settle, then reposition the docked window so the arrow lands on it.
+        guard !isWindowDetached, window.isVisible else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.40) { [weak self] in
+            guard let self = self, !self.isWindowDetached, self.window.isVisible else { return }
+            self.repositionDockedWindow()
         }
     }
 
@@ -19021,6 +18929,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return f
     }
 
+    /// Repositions the docked window: recalculates Y from the live tray icon, then
+    /// re-applies the user's saved horizontal offset (X) and refreshes the arrow mask.
+    /// No-op when the window is detached (free-floating).
+    private func repositionDockedWindow() {
+        guard !isWindowDetached else { return }
+        positionWindowUnderTrayIcon()           // sets correct Y; centers X under tray
+        if let saved = lastDockedFrame {
+            let currentY = window.frame.origin.y
+            let origin = NSPoint(x: saved.origin.x, y: currentY)
+            let testRect = NSRect(origin: origin, size: window.frame.size)
+            let reachable = NSScreen.screens.contains { $0.visibleFrame.intersects(testRect) }
+            if reachable { window.setFrameOrigin(origin) }
+            else { lastDockedFrame = nil }
+        }
+        updateWindowMask()
+    }
+
     func positionWindowUnderTrayIcon() {
         let wSize = window.frame.size
         let midX: CGFloat
@@ -19049,12 +18974,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
             var fallbackY = round(screen.visibleFrame.maxY - 4 - wSize.height)
             if fallbackY <= 0 {
-                // Window taller than screen — clamp height so it always fits
-                let clampedH = max(220, screen.visibleFrame.height - 80)
+                // Window taller than screen — clamp height so it always fits.
+                // visibleFrame already excludes menu bar+Dock; only a 4px gap is needed.
+                let clampedH = max(220, screen.visibleFrame.height - 4)
                 window.setContentSize(NSSize(width: wSize.width, height: clampedH))
                 fallbackY = round(screen.visibleFrame.maxY - 4 - clampedH)
             }
-            y = max(0, fallbackY)
+            y = max(screen.visibleFrame.minY, fallbackY)  // never overlap the Dock
             midX = round(screen.visibleFrame.midX)
         }
 
@@ -19602,15 +19528,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                          text: "quickTerminal → SystemTrayTerminal  Installing update…",
                          badgeColor: NSColor(calibratedRed: 0.18, green: 0.45, blue: 0.80, alpha: 1.0),
                          dismissAfter: 0)
-        updateChecker.checkForUpdate { [weak self] result in
+        Task { [weak self] in
             guard let self = self else { return }
-            switch result {
-            case .success(let release):
-                if let release = release {
+            do {
+                if let release = try await self.updateChecker.checkForUpdate() {
                     self.pendingRelease = release
                     self.startUpdateDownload(release: release)
                 }
-            case .failure:
+            } catch {
                 self.showGenericToast(badge: "RENAMED",
                                       text: "quickTerminal → SystemTrayTerminal  Tap to retry",
                                       badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0),
@@ -19860,10 +19785,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func silentUpdateCheck() {
         guard UserDefaults.standard.bool(forKey: "autoCheckUpdates") else { return }
-        updateChecker.checkForUpdate { [weak self] result in
-            if case .success(let release) = result, let release = release {
-                self?.pendingRelease = release
-                self?.showUpdateToast(version: release.tagName)
+        Task { [weak self] in
+            guard let self = self else { return }
+            if let release = try? await self.updateChecker.checkForUpdate() {
+                self.pendingRelease = release
+                self.showUpdateToast(version: release.tagName)
             }
         }
     }
@@ -19879,18 +19805,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         showGenericToast(badge: "UPDATE", text: Loc.checking,
                          badgeColor: NSColor(calibratedWhite: 0.35, alpha: 1.0), dismissAfter: 3.0)
 
-        updateChecker.checkForUpdate { [weak self] result in
+        Task { [weak self] in
             guard let self = self else { return }
-            switch result {
-            case .success(let release):
-                if let release = release {
+            do {
+                if let release = try await self.updateChecker.checkForUpdate() {
                     self.pendingRelease = release
                     self.showUpdateToast(version: release.tagName)
                 } else {
                     self.showGenericToast(badge: "UPDATE", text: String(format: Loc.alreadyUpToDate, kAppVersion),
                                           badgeColor: NSColor(calibratedRed: 0.18, green: 0.55, blue: 0.34, alpha: 1.0))
                 }
-            case .failure:
+            } catch {
                 self.showGenericToast(badge: "UPDATE", text: Loc.checkFailed,
                                       badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0))
             }
@@ -19904,24 +19829,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         showDownloadProgressToast(percent: 0)
-        updateChecker.downloadAndInstall(release: release, onProgress: { [weak self] pct in
-            self?.showDownloadProgressToast(percent: pct)
-        }, onComplete: { [weak self] result in
+        Task { [weak self] in
             guard let self = self else { return }
-            self.dismissDownloadProgressToast()
-            switch result {
-            case .success:
-                // SUCCESS toast (matching dummy design)
+            do {
+                try await self.updateChecker.downloadAndInstall(release: release) { @MainActor [weak self] pct in
+                    self?.showDownloadProgressToast(percent: pct)
+                }
+                self.dismissDownloadProgressToast()
+                // SUCCESS toast — installUpdate already handles saveSession + relaunch + exit
                 self.showGenericToast(badge: "SUCCESS", text: Loc.updateInstalled,
                                       badgeColor: NSColor(calibratedRed: 0.18, green: 0.55, blue: 0.34, alpha: 1.0),
                                       dismissAfter: 3.0)
-                // Note: installUpdate already handles saveSession + relaunch + exit
-            case .failure(let error):
+            } catch {
+                self.dismissDownloadProgressToast()
                 self.showGenericToast(badge: "ERROR", text: error.localizedDescription,
                                       badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0),
                                       dismissAfter: 8.0)
             }
-        })
+        }
     }
 
     func resetWindowSize() {
@@ -20026,7 +19951,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let screen = window.screen ?? NSScreen.main else { return }
         let sf = screen.visibleFrame
         clearSnapStates()
-        snapAnimate(to: NSRect(x: sf.origin.x + sf.width / 2, y: sf.origin.y, width: sf.width / 2, height: sf.height))
+        // height - 4 matches maxH in startup so the size survives restart without clamp.
+        snapAnimate(to: NSRect(x: sf.origin.x + sf.width / 2, y: sf.origin.y, width: sf.width / 2, height: sf.height - 4))
     }
 
     func toggleVertical() {
@@ -20040,7 +19966,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             preVerticalFrame = saved
             var newFrame = window.frame
             newFrame.origin.y = screen.visibleFrame.origin.y
-            newFrame.size.height = screen.visibleFrame.height
+            // 4px headroom matches the gap used in positionWindowUnderTrayIcon (trayIcon.minY - 4),
+            // so this height is exactly maxH and survives restart without any clamp.
+            newFrame.size.height = screen.visibleFrame.height - 4
             snapAnimate(to: newFrame)
         }
     }
@@ -20117,20 +20045,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.orderFrontRegardless()  // Ensures window appears even when app is not active
         // Re-position after ordering: alpha=0 so windowDidMove guard (alpha>0) skips
         // saving, and we override any macOS screen-constraint repositioning cleanly.
-        positionWindowUnderTrayIcon()
-
-        // Docked: restore user's custom position if set.
-        // Do NOT clamp to screen — user may intentionally place the window partially
-        // off-screen (e.g. left edge). Only skip if the window would be completely
-        // off all screens (e.g. external monitor was disconnected).
-        if !isWindowDetached, let saved = lastDockedFrame {
-            let reachable = NSScreen.screens.contains { $0.visibleFrame.intersects(saved) }
-            if reachable {
-                window.setFrameOrigin(saved.origin)
-            } else {
-                lastDockedFrame = nil   // monitor gone — reset to tray center
-            }
-        }
+        // repositionDockedWindow() recalculates Y from the tray icon, re-applies saved X,
+        // and refreshes the arrow mask — all in one call.
+        repositionDockedWindow()
 
         if #available(macOS 14.0, *) { NSApp.activate() }
         else { NSApp.activate(ignoringOtherApps: true) }
@@ -20295,10 +20212,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             UserDefaults.standard.set(Double(frame.origin.x), forKey: "windowX")
             UserDefaults.standard.set(Double(frame.origin.y), forKey: "windowY")
         } else {
-            // Docked: save full frame (origin + size) so position+size survive hide/show and restart.
+            // Docked: save X only — Y is always recalculated from tray-icon on show.
             lastDockedFrame = frame
             UserDefaults.standard.set(Double(frame.origin.x), forKey: "dockedWindowX")
-            UserDefaults.standard.set(Double(frame.origin.y), forKey: "dockedWindowY")
             settingsOverlay?.updateResetButtonState()
         }
     }
@@ -20327,12 +20243,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 UserDefaults.standard.set(Double(origin.x), forKey: "windowX")
                 UserDefaults.standard.set(Double(origin.y), forKey: "windowY")
             } else {
-                // Docked: save user-moved position in memory AND UserDefaults.
-                // Uses separate keys (dockedWindowX/Y) to avoid the feedback loop
-                // that occurred when the tray-icon fallback position was saved to windowX/Y.
+                // Docked: save X only — Y is always recalculated from tray-icon on show.
                 self.lastDockedFrame = self.window.frame
                 UserDefaults.standard.set(Double(origin.x), forKey: "dockedWindowX")
-                UserDefaults.standard.set(Double(origin.y), forKey: "dockedWindowY")
                 self.settingsOverlay?.updateResetButtonState()
             }
         }
@@ -20481,9 +20394,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 UserDefaults.standard.set(Double(w.frame.origin.x), forKey: "windowX")
                 UserDefaults.standard.set(Double(w.frame.origin.y), forKey: "windowY")
             } else {
-                // Docked: persist position so next launch restores where the user left it.
+                // Docked: persist X only. Y is never restored (always recalculated from
+                // live tray-icon position on next launch to avoid stale gaps after sleep/wake).
                 UserDefaults.standard.set(Double(w.frame.origin.x), forKey: "dockedWindowX")
-                UserDefaults.standard.set(Double(w.frame.origin.y), forKey: "dockedWindowY")
+                UserDefaults.standard.removeObject(forKey: "dockedWindowY")
             }
         }
         saveSession()

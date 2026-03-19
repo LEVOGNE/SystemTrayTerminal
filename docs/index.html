@@ -42,7 +42,7 @@
   "description": "A blazing-fast terminal emulator for macOS, written from scratch in a single Swift file. 17,000+ lines, zero dependencies, native Cocoa rendering at 60 FPS.",
   "url": "https://levogne.github.io/SystemTrayTerminal/",
   "downloadUrl": "https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest",
-  "softwareVersion": "1.5.0",
+  "softwareVersion": "1.5.2",
   "fileSize": "4.8 MB",
   "author": {
     "@type": "Person",
@@ -56,7 +56,7 @@
     "description": "Free for personal use"
   },
   "screenshot": "https://raw.githubusercontent.com/LEVOGNE/SystemTrayTerminal/main/SystemTrayTerminal.png",
-  "releaseNotes": "Text Editor Tab with syntax highlighting (13 languages), Vim/Nano/Normal input modes, live preview (HTML/SVG/Markdown/CSV), custom line number gutter, print modal with native macOS print dialog, session restore for editor tabs, unsaved changes indicator, 10-language localization",
+  "releaseNotes": "Window positioning fixed: no gap after restart, custom X preserved after sleep/wake, screen-change repositioning, height clamp corrected from 80px to 4px",
   "programmingLanguage": "Swift"
 }
 </script>
@@ -1056,7 +1056,7 @@ footer {
 
   <div class="hero-badge">
     <span class="dot"></span>
-    v1.5.0 — Text Editor · Vim Mode · Line Numbers · Print
+    v1.5.2 — Window Fix · Sleep/Wake · Screen Change · Arrow
   </div>
 
   <h1>
@@ -1100,7 +1100,7 @@ footer {
         <noscript>
           <div class="terminal-line"><span class="prompt">~ </span><span class="cmd">neofetch --minimal</span></div>
           <div class="terminal-line"><span class="output">  macOS 15.2 Sequoia</span></div>
-          <div class="terminal-line"><span class="output">  Terminal: <span class="highlight">SystemTrayTerminal v1.5.0</span></span></div>
+          <div class="terminal-line"><span class="output">  Terminal: <span class="highlight">SystemTrayTerminal v1.5.2</span></span></div>
           <div class="terminal-line"><span class="output">  Shell: zsh 5.9</span></div>
           <div class="terminal-line"><span class="prompt">~ </span><span class="cmd">systemtrayterminal --info</span></div>
           <div class="terminal-line"><span class="output">  <span class="amber">17,700+</span> lines | <span class="amber">1</span> file | <span class="amber">0</span> deps | <span class="amber">4.8 MB</span></span></div>
@@ -1332,7 +1332,7 @@ footer {
       <div class="install-card">
         <h3>Direct Download</h3>
         <div class="install-cmd" onclick="window.open('https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest', '_blank')">
-          <span>Download SystemTrayTerminal_v1.5.0.zip</span>
+          <span>Download SystemTrayTerminal_v1.5.2.zip</span>
           <button class="copy-btn" aria-label="Download">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
@@ -1363,12 +1363,47 @@ footer {
 
     <div class="changelog-list">
 
+      <!-- v1.5.2 -->
+      <div class="changelog-entry">
+        <div class="changelog-left">
+          <span class="changelog-ver">v1.5.2</span>
+          <span class="changelog-date">2026-03-19</span>
+          <span class="changelog-tag latest">Latest</span>
+        </div>
+        <div class="changelog-right">
+          <div class="changelog-title">Window Positioning — Sleep/Wake &amp; Screen Fixes</div>
+          <div class="changelog-items">
+            <div class="changelog-item"><strong>Gap below menu bar fixed</strong> — Y position always recalculated from live tray icon; stale <code>dockedWindowY</code> no longer restored on restart</div>
+            <div class="changelog-item"><strong>Custom X preserved after sleep/wake</strong> — <code>NSWorkspace.didWakeNotification</code> repositions the docked window 400 ms after wake, keeping the user's horizontal offset</div>
+            <div class="changelog-item"><strong>Screen-change repositioning</strong> — <code>NSApplication.didChangeScreenParametersNotification</code> repositions the window when a monitor is connected/disconnected or resolution changes</div>
+            <div class="changelog-item"><strong>Window height 1/5 shorter after restart fixed</strong> — Startup height clamp reduced from 80 px to 4 px; <code>toggleVertical</code> and <code>snapRightFull</code> use matching headroom</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.5.1 -->
+      <div class="changelog-entry">
+        <div class="changelog-left">
+          <span class="changelog-ver">v1.5.1</span>
+          <span class="changelog-date">2026-03-18</span>
+          <span class="changelog-tag fix">Fix</span>
+        </div>
+        <div class="changelog-right">
+          <div class="changelog-title">Bell Notification &amp; Inactivity Alert</div>
+          <div class="changelog-items">
+            <div class="changelog-item"><strong>Bell Notification</strong> — sound + tray icon flash on BEL when window is not in focus; toggle in Settings</div>
+            <div class="changelog-item"><strong>Inactivity Alert</strong> — BEL after N seconds of silence following user input (5 / 8 / 15 / 30 s)</div>
+            <div class="changelog-item"><strong>Docked window position persisted</strong> — X saved across restarts (fully fixed in v1.5.2)</div>
+          </div>
+        </div>
+      </div>
+
       <!-- v1.5.0 -->
       <div class="changelog-entry">
         <div class="changelog-left">
           <span class="changelog-ver">v1.5.0</span>
           <span class="changelog-date">2026-03-18</span>
-          <span class="changelog-tag latest">Latest</span>
+          <span class="changelog-tag feature">Feature</span>
         </div>
         <div class="changelog-right">
           <div class="changelog-title">Text Editor &amp; Vim Mode</div>
@@ -1498,7 +1533,7 @@ footer {
     <div class="hero-actions">
       <a href="https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest" class="btn-primary">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Download v1.5.0
+        Download v1.5.2
       </a>
       <a href="https://github.com/LEVOGNE/SystemTrayTerminal" class="btn-secondary" target="_blank">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -1533,12 +1568,12 @@ footer {
 const termLines = [
   { prompt: '~ ', cmd: 'neofetch --minimal', delay: 0 },
   { output: '  macOS 15.2 Sequoia', delay: 400 },
-  { output: '  Terminal: <span class="highlight">SystemTrayTerminal v1.5.0</span>', delay: 600 },
+  { output: '  Terminal: <span class="highlight">SystemTrayTerminal v1.5.2</span>', delay: 600 },
   { output: '  Shell: zsh 5.9', delay: 800 },
   { output: '  Resolution: 2560x1600', delay: 1000 },
   { output: '', delay: 1200 },
   { prompt: '~ ', cmd: 'systemtrayterminal --info', delay: 1400 },
-  { output: '  <span class="amber">17,000+</span> lines  |  <span class="amber">1</span> file  |  <span class="amber">0</span> deps  |  <span class="amber">4.8 MB</span>', delay: 1800 },
+  { output: '  <span class="amber">17,700+</span> lines  |  <span class="amber">1</span> file  |  <span class="amber">0</span> deps  |  <span class="amber">4.8 MB</span>', delay: 1800 },
   { output: '  Parser: 13-state FSM  |  Render: 60 FPS CGContext', delay: 2000 },
   { output: '  Colors: 24-bit TrueColor  |  Graphics: Sixel', delay: 2200 },
   { output: '', delay: 2400 },

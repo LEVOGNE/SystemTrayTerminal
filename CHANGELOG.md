@@ -4,6 +4,31 @@ All notable changes to SystemTrayTerminal are documented here.
 
 ---
 
+## v1.5.2 — 2026-03-19
+
+### Bug Fixes
+- **Window gap below menu bar after restart** — `dockedWindowY` is no longer saved or restored. The Y position is always recalculated from the live tray-icon position on every show, preventing stale values from previous sessions causing a visible gap.
+- **Window resets to center after sleep/wake** — Custom horizontal position (X) is now preserved across sleep/wake cycles. A new `NSWorkspace.didWakeNotification` handler repositions the docked window 400 ms after wake to account for tray-icon drift.
+- **Window displaced after Lid close/open or monitor change** — A new `NSApplication.didChangeScreenParametersNotification` handler repositions the window whenever the screen layout changes (monitor connected/disconnected, resolution change).
+- **Window height 1/5 shorter after restart** — Startup height clamp changed from `visibleFrame.height − 80` to `visibleFrame.height − 4`. The 80 px buffer was excessive; `visibleFrame` already excludes the menu bar and Dock.
+- **`toggleVertical` and `snapRightFull` height mismatch** — Both now use `visibleFrame.height − 4`, matching the startup `maxH` exactly so the saved size survives restart without any clamp.
+- **Feedback popup blocked UI** — `sendmail` subprocess was called with `proc.waitUntilExit()` on the main thread, freezing the UI until the process exited. Moved to `Task.detached`; UI updates dispatched back via `MainActor.run`.
+
+### Internal
+- Extracted `repositionDockedWindow()` helper — consolidated three identical X-restore + mask-update blocks (`showWindowAnimated`, `handleWakeFromSleep`, `handleScreenChange`) into one private function.
+- Fallback Y clamp in `positionWindowUnderTrayIcon` changed from `max(0, fallbackY)` to `max(visibleFrame.minY, fallbackY)` to prevent overlap with a bottom Dock in the rare fallback path.
+- Stale `dockedWindowY` UserDefaults key cleaned up on first launch after upgrade.
+- **Concurrency migration** — All GCD callback chains replaced with `async/await`:
+  - `URLSession.fetchData(for:) async throws` helper extension (macOS 11-compatible via `withCheckedThrowingContinuation`)
+  - `GitHubClient`: 7 network functions converted to `async`; `fetchRemoteDataIfNeeded` uses `async let` for parallel API calls
+  - `UpdateChecker`: `DispatchSemaphore` removed; `installUpdate`, `downloadAndInstall`, `verifyChecksum`, `checkForUpdate` converted to `async throws`
+  - `GitStatusPanelView.refresh()` + `toggleDiff()`: `DispatchQueue.global` replaced with `Task` + `withCheckedContinuation`
+  - `ChromeCDPClient`: `receiveLoop()` rewritten as async `for`-`await` loop; all HTTP calls (`isAvailable`, `getActiveTabWS`, `activateTarget`, `createBlankTab`, `closeTab`, `getTabHostname`) converted to `async`; `connect(wsURL:)` converted to `async -> Bool`
+  - `AIUsageManager.fetchUsage()`: internally uses `Task` with `withCheckedThrowingContinuation`; 401/403 token-rotation logic preserved
+  - `ChromeCDPClient` + `AIUsageManager` marked `@unchecked Sendable`
+
+---
+
 ## v1.5.1 — 2026-03-18
 
 ### New Features
