@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SystemTrayTerminal — A 17k-line single-file terminal emulator for macOS</title>
-<meta name="description" content="A blazing-fast terminal emulator for macOS. 17,000+ lines of pure Swift, zero dependencies, native Cocoa rendering at 60 FPS. Free download. SSH Manager, color themes, tray detach, WebPicker. Lives in your menu bar with global hotkey.">
+<meta name="description" content="A blazing-fast terminal emulator for macOS. 20,700+ lines of pure Swift, zero dependencies, native Cocoa rendering at 60 FPS. Free download. SSH Manager, color themes, tray detach, WebPicker. Lives in your menu bar with global hotkey.">
 <meta name="keywords" content="terminal emulator, macOS terminal, Swift terminal, command line, developer tools, iTerm2 alternative, Terminal.app alternative, menu bar terminal, open source terminal, macOS developer tools">
 <meta name="author" content="Levent Ersen (LEVOGNE)">
 <meta name="robots" content="index, follow">
@@ -12,7 +12,7 @@
 
 <!-- Open Graph / Facebook -->
 <meta property="og:title" content="SystemTrayTerminal — Fast Terminal Emulator for macOS">
-<meta property="og:description" content="17,000+ lines of pure Swift. One file. Zero dependencies. 4.8 MB. SSH Manager, themes, shortcuts, SHA256-verified auto-updater. Free for personal use.">
+<meta property="og:description" content="20,700+ lines of pure Swift. One file. Zero dependencies. 2.9 MB. SSH Manager, themes, shortcuts, SHA256-verified auto-updater. Free for personal use.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://levogne.github.io/SystemTrayTerminal/">
 <meta property="og:image" content="https://raw.githubusercontent.com/LEVOGNE/SystemTrayTerminal/main/SystemTrayTerminal.gif">
@@ -24,7 +24,7 @@
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="SystemTrayTerminal — Terminal Emulator for macOS">
-<meta name="twitter:description" content="17,000+ lines. One Swift file. Zero dependencies. SSH Manager, color themes, SHA256-verified auto-updater. Free download.">
+<meta name="twitter:description" content="20,700+ lines. One Swift file. Zero dependencies. SSH Manager, color themes, SHA256-verified auto-updater. Free download.">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/LEVOGNE/SystemTrayTerminal/main/SystemTrayTerminal.gif">
 
 <!-- Favicon -->
@@ -39,11 +39,11 @@
   "name": "SystemTrayTerminal",
   "operatingSystem": "macOS",
   "applicationCategory": "DeveloperApplication",
-  "description": "A blazing-fast terminal emulator for macOS, written from scratch in a single Swift file. 17,000+ lines, zero dependencies, native Cocoa rendering at 60 FPS.",
+  "description": "A blazing-fast terminal emulator for macOS, written from scratch in a single Swift file. 20,700+ lines, zero dependencies, native Cocoa rendering at 60 FPS.",
   "url": "https://levogne.github.io/SystemTrayTerminal/",
   "downloadUrl": "https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest",
   "softwareVersion": "1.5.2",
-  "fileSize": "4.8 MB",
+  "fileSize": "2.9 MB",
   "author": {
     "@type": "Person",
     "name": "Levent Ersen",
@@ -1056,11 +1056,11 @@ footer {
 
   <div class="hero-badge">
     <span class="dot"></span>
-    v1.5.2 — Window Fix · Sleep/Wake · Screen Change · Arrow
+    v1.5.2 — Window Fixes · async/await Migration · Feedback Bug Fix
   </div>
 
   <h1>
-    <span class="quick">quick</span><span class="terminal">TERMINAL</span>
+    <span class="quick">SystemTray</span><span class="terminal">Terminal</span>
   </h1>
 
   <p class="hero-sub">
@@ -1069,10 +1069,10 @@ footer {
   </p>
 
   <div class="hero-stats">
-    <span class="hero-stat"><strong>17,700+</strong> lines</span>
+    <span class="hero-stat"><strong>20,700+</strong> lines</span>
     <span class="hero-stat"><strong>1</strong> file</span>
     <span class="hero-stat"><strong>0</strong> dependencies</span>
-    <span class="hero-stat"><strong>4.8 MB</strong> app</span>
+    <span class="hero-stat"><strong>2.9 MB</strong> app</span>
     <span class="hero-stat"><strong>60</strong> FPS</span>
   </div>
 
@@ -1103,7 +1103,7 @@ footer {
           <div class="terminal-line"><span class="output">  Terminal: <span class="highlight">SystemTrayTerminal v1.5.2</span></span></div>
           <div class="terminal-line"><span class="output">  Shell: zsh 5.9</span></div>
           <div class="terminal-line"><span class="prompt">~ </span><span class="cmd">systemtrayterminal --info</span></div>
-          <div class="terminal-line"><span class="output">  <span class="amber">17,700+</span> lines | <span class="amber">1</span> file | <span class="amber">0</span> deps | <span class="amber">4.8 MB</span></span></div>
+          <div class="terminal-line"><span class="output">  <span class="amber">20,700+</span> lines | <span class="amber">1</span> file | <span class="amber">0</span> deps | <span class="amber">2.9 MB</span></span></div>
           <div class="terminal-line"><span class="output">  Parser: 13-state FSM | Render: 60 FPS CGContext</span></div>
           <div class="terminal-line"><span class="output">  Colors: 24-bit TrueColor | Graphics: Sixel</span></div>
         </noscript>
@@ -1371,12 +1371,14 @@ footer {
           <span class="changelog-tag latest">Latest</span>
         </div>
         <div class="changelog-right">
-          <div class="changelog-title">Window Positioning — Sleep/Wake &amp; Screen Fixes</div>
+          <div class="changelog-title">Window Fixes · async/await Migration · Feedback Bug Fix</div>
           <div class="changelog-items">
             <div class="changelog-item"><strong>Gap below menu bar fixed</strong> — Y position always recalculated from live tray icon; stale <code>dockedWindowY</code> no longer restored on restart</div>
             <div class="changelog-item"><strong>Custom X preserved after sleep/wake</strong> — <code>NSWorkspace.didWakeNotification</code> repositions the docked window 400 ms after wake, keeping the user's horizontal offset</div>
             <div class="changelog-item"><strong>Screen-change repositioning</strong> — <code>NSApplication.didChangeScreenParametersNotification</code> repositions the window when a monitor is connected/disconnected or resolution changes</div>
             <div class="changelog-item"><strong>Window height 1/5 shorter after restart fixed</strong> — Startup height clamp reduced from 80 px to 4 px; <code>toggleVertical</code> and <code>snapRightFull</code> use matching headroom</div>
+            <div class="changelog-item"><strong>Feedback popup blocked UI</strong> — <code>sendmail</code> subprocess ran <code>waitUntilExit()</code> on the main thread; moved to <code>Task.detached</code></div>
+            <div class="changelog-item"><strong>Full async/await migration</strong> — <code>GitHubClient</code>, <code>UpdateChecker</code>, <code>ChromeCDPClient</code>, <code>GitStatusPanelView</code>, <code>AIUsageManager</code> fully migrated from GCD callbacks to Swift concurrency</div>
           </div>
         </div>
       </div>
@@ -1509,7 +1511,7 @@ footer {
             <div class="changelog-item"><strong>VT100/VT220/xterm</strong> — 13-state FSM parser, built from scratch</div>
             <div class="changelog-item"><strong>60 FPS Rendering</strong> — CGContext, 24-bit TrueColor, Sixel graphics</div>
             <div class="changelog-item"><strong>Menu Bar App</strong> — no dock icon, global hotkey Ctrl+&lt;</div>
-            <div class="changelog-item"><strong>Single Swift file</strong> — zero dependencies, 4.8 MB app bundle</div>
+            <div class="changelog-item"><strong>Single Swift file</strong> — zero dependencies, 2.9 MB app bundle</div>
           </div>
         </div>
       </div>
@@ -1573,7 +1575,7 @@ const termLines = [
   { output: '  Resolution: 2560x1600', delay: 1000 },
   { output: '', delay: 1200 },
   { prompt: '~ ', cmd: 'systemtrayterminal --info', delay: 1400 },
-  { output: '  <span class="amber">17,700+</span> lines  |  <span class="amber">1</span> file  |  <span class="amber">0</span> deps  |  <span class="amber">4.8 MB</span>', delay: 1800 },
+  { output: '  <span class="amber">20,700+</span> lines  |  <span class="amber">1</span> file  |  <span class="amber">0</span> deps  |  <span class="amber">2.9 MB</span>', delay: 1800 },
   { output: '  Parser: 13-state FSM  |  Render: 60 FPS CGContext', delay: 2000 },
   { output: '  Colors: 24-bit TrueColor  |  Graphics: Sixel', delay: 2200 },
   { output: '', delay: 2400 },
