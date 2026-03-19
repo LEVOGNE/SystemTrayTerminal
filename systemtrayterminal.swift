@@ -11314,6 +11314,42 @@ class ChromeCDPClient: @unchecked Sendable {
         }
     }
 
+    /// Captures a screenshot of a specific element identified by its data-qt-pick-N attribute.
+    /// Flow: DOM.getDocument → DOM.querySelector → DOM.getBoxModel → Page.captureScreenshot(clip)
+    func captureElementScreenshot(pickId: Int, completion: @escaping (Data?) -> Void) {
+        // Step 1: get root node ID
+        cdpCommand("DOM.getDocument", params: ["depth": 0]) { [weak self] docResult in
+            guard let self = self,
+                  let root = docResult?["root"] as? [String: Any],
+                  let rootId = root["nodeId"] as? Int else { completion(nil); return }
+            // Step 2: find element node by attribute selector
+            self.cdpCommand("DOM.querySelector",
+                            params: ["nodeId": rootId, "selector": "[data-qt-pick-\(pickId)]"]) { [weak self] qResult in
+                guard let self = self,
+                      let nodeId = qResult?["nodeId"] as? Int, nodeId != 0 else { completion(nil); return }
+                // Step 3: get bounding box
+                self.cdpCommand("DOM.getBoxModel", params: ["nodeId": nodeId]) { [weak self] boxResult in
+                    guard let self = self,
+                          let model = boxResult?["model"] as? [String: Any],
+                          let content = model["content"] as? [Double], content.count >= 6 else { completion(nil); return }
+                    // content = [x1,y1, x2,y1, x2,y2, x1,y2] (quad — quad coordinates)
+                    let x = content[0]; let y = content[1]
+                    let w = content[2] - content[0]; let h = content[5] - content[1]
+                    guard w > 0, h > 0 else { completion(nil); return }
+                    // Step 4: capture screenshot with clip
+                    let clip: [String: Any] = ["x": x, "y": y, "width": w, "height": h, "scale": 1]
+                    self.cdpCommand("Page.captureScreenshot",
+                                    params: ["format": "png", "clip": clip]) { [weak self] ssResult in
+                        guard self != nil else { completion(nil); return }
+                        guard let b64 = ssResult?["data"] as? String,
+                              let data = Data(base64Encoded: b64) else { completion(nil); return }
+                        completion(data)
+                    }
+                }
+            }
+        }
+    }
+
     /// Navigates the connected tab to a URL (Page.navigate)
     func navigate(to rawURL: String) {
         var urlStr = rawURL.trimmingCharacters(in: .whitespaces)
@@ -12113,6 +12149,12 @@ private final class PickRowView: NSView {
     private var storedSelector: String = ""
     private var storedInnerText: String = ""
     private var storedXPath: String = ""
+    private var isStylesExpanded = false
+    private let stylesWrap = NSView()
+    private var stylesH: NSLayoutConstraint!
+    private var rowH: NSLayoutConstraint!
+    private let stylesLabel = NSTextField(labelWithString: "")
+    var onStylesRequested: ((Int) -> Void)?
     private let xBtn = NSButton()
     private let labelScroll = NSScrollView()
     private var rowArea: NSTrackingArea?
@@ -12163,8 +12205,9 @@ private final class PickRowView: NSView {
         xBtn.target = self; xBtn.action = #selector(removed)
 
         addSubview(dot); addSubview(labelScroll); addSubview(xBtn)
+        rowH = heightAnchor.constraint(equalToConstant: 18)
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 18),
+            rowH,
             dot.leadingAnchor.constraint(equalTo: leadingAnchor),
             dot.centerYAnchor.constraint(equalTo: centerYAnchor),
             dot.widthAnchor.constraint(equalToConstant: 8),
@@ -12177,6 +12220,29 @@ private final class PickRowView: NSView {
             labelScroll.centerYAnchor.constraint(equalTo: centerYAnchor),
             labelScroll.heightAnchor.constraint(equalToConstant: labelH),
         ])
+
+        // ── Styles expand area ──
+        stylesWrap.wantsLayer = true
+        stylesWrap.layer?.masksToBounds = true
+        stylesWrap.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stylesWrap)
+
+        stylesLabel.font = NSFont.monospacedSystemFont(ofSize: 7.5, weight: .regular)
+        stylesLabel.textColor = NSColor(calibratedWhite: 0.55, alpha: 1)
+        stylesLabel.maximumNumberOfLines = 2
+        stylesLabel.translatesAutoresizingMaskIntoConstraints = false
+        stylesWrap.addSubview(stylesLabel)
+
+        NSLayoutConstraint.activate([
+            stylesWrap.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stylesWrap.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stylesWrap.topAnchor.constraint(equalTo: topAnchor, constant: 18),
+            stylesLabel.leadingAnchor.constraint(equalTo: stylesWrap.leadingAnchor, constant: 12),
+            stylesLabel.trailingAnchor.constraint(equalTo: stylesWrap.trailingAnchor, constant: -8),
+            stylesLabel.centerYAnchor.constraint(equalTo: stylesWrap.centerYAnchor),
+        ])
+        stylesH = stylesWrap.heightAnchor.constraint(equalToConstant: 0)
+        stylesH.isActive = true
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -12216,11 +12282,35 @@ private final class PickRowView: NSView {
     override func mouseDown(with event: NSEvent) {
         let pt = convert(event.locationInWindow, from: nil)
         if !xBtn.frame.contains(pt) {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(html, forType: .string)
-            onCopied?()
+            if isStylesExpanded {
+                collapseStyles()
+            } else {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(html, forType: .string)
+                onCopied?()
+                onStylesRequested?(currentPickId)
+            }
         }
         super.mouseDown(with: event)
+    }
+
+    func showStyles(text: String) {
+        stylesLabel.stringValue = text
+        isStylesExpanded = true
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.18
+            self.stylesH.animator().constant = 34
+            self.rowH.animator().constant = 52
+        }
+    }
+
+    func collapseStyles() {
+        isStylesExpanded = false
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.12
+            self.stylesH.animator().constant = 0
+            self.rowH.animator().constant = 18
+        }
     }
 
     @objc private func removed() { onRemove?() }
@@ -12282,6 +12372,17 @@ class WebPickerSidebarView: NSView {
     private let watchStatusLabel  = NSTextField(labelWithString: "")
     private var watchRowH: NSLayoutConstraint!
     private static let watchFolderKey = "webPickerWatchFolder"
+
+    // ── JS REPL ──
+    private var replExpanded      = false
+    private let replBtn           = NSButton()
+    private let replWrap          = NSView()
+    private var replHeightC: NSLayoutConstraint!
+    private let replField         = NSTextField()
+    private let replResultLabel   = NSTextField(labelWithString: "")
+    private var replHistory: [String] = []
+    private var replHistoryIdx    = -1
+    private static let replH: CGFloat = 56
     private let previewSep         = NSView()
     private let picksHeaderLabel   = NSTextField(labelWithString: "")
     private let picksSep           = NSView()
@@ -12351,6 +12452,17 @@ class WebPickerSidebarView: NSView {
         closeBtn.target = self; closeBtn.action = #selector(doClose)
         closeBtn.translatesAutoresizingMaskIntoConstraints = false
         addSubview(closeBtn)
+
+        // ── REPL toggle button in title bar ──
+        replBtn.title = "</>"
+        replBtn.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .medium)
+        replBtn.isBordered = false
+        replBtn.contentTintColor = NSColor(calibratedWhite: 0.35, alpha: 1)
+        replBtn.toolTip = "Toggle JS REPL"
+        replBtn.target = self; replBtn.action = #selector(toggleREPL)
+        replBtn.isHidden = true
+        replBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(replBtn)
 
         for (btn, symbol, sel) in [(moveDownBtn, "▼", #selector(moveDownTapped)),
                                    (moveUpBtn,   "▲", #selector(moveUpTapped))] {
@@ -12540,6 +12652,9 @@ class WebPickerSidebarView: NSView {
             moveUpBtn.trailingAnchor.constraint(equalTo: moveDownBtn.leadingAnchor, constant: -1),
             moveUpBtn.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
             moveUpBtn.widthAnchor.constraint(equalToConstant: 16),
+            replBtn.trailingAnchor.constraint(equalTo: moveUpBtn.leadingAnchor, constant: -4),
+            replBtn.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            replBtn.widthAnchor.constraint(equalToConstant: 26),
             // ── Debug links ──
             debugLink1.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             debugLink1.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 3),
@@ -12681,6 +12796,70 @@ class WebPickerSidebarView: NSView {
         watchRowH = watchRow.heightAnchor.constraint(equalToConstant: 0)
         watchRowH.isActive = true
 
+        // ── JS REPL panel ──
+        replWrap.wantsLayer = true
+        replWrap.layer?.masksToBounds = true
+        replWrap.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(replWrap)
+
+        let replInner = NSView()
+        replInner.wantsLayer = true
+        replInner.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.03).cgColor
+        replInner.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.07).cgColor
+        replInner.layer?.borderWidth = 1
+        replInner.translatesAutoresizingMaskIntoConstraints = false
+        replWrap.addSubview(replInner)
+
+        let replPrompt = NSTextField(labelWithString: "›")
+        replPrompt.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
+        replPrompt.textColor = Self.teal
+        replPrompt.translatesAutoresizingMaskIntoConstraints = false
+        replInner.addSubview(replPrompt)
+
+        // Set up replField manually (no VertCenteredTextFieldCell needed — use plain NSTextField)
+        replField.placeholderString = "document.title"
+        replField.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+        replField.textColor = NSColor(calibratedWhite: 0.9, alpha: 1)
+        replField.isBezeled = false
+        replField.isEditable = true
+        replField.drawsBackground = false
+        replField.focusRingType = .none
+        replField.target = self; replField.action = #selector(evaluateREPL)
+        replField.delegate = self
+        replField.translatesAutoresizingMaskIntoConstraints = false
+        replInner.addSubview(replField)
+
+        replResultLabel.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
+        replResultLabel.textColor = Self.teal.withAlphaComponent(0.8)
+        replResultLabel.maximumNumberOfLines = 1
+        replResultLabel.lineBreakMode = .byTruncatingTail
+        replResultLabel.translatesAutoresizingMaskIntoConstraints = false
+        replInner.addSubview(replResultLabel)
+
+        NSLayoutConstraint.activate([
+            replWrap.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            replWrap.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            replWrap.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+            replInner.topAnchor.constraint(equalTo: replWrap.topAnchor),
+            replInner.leadingAnchor.constraint(equalTo: replWrap.leadingAnchor),
+            replInner.trailingAnchor.constraint(equalTo: replWrap.trailingAnchor),
+            replInner.heightAnchor.constraint(equalToConstant: Self.replH),
+            replPrompt.leadingAnchor.constraint(equalTo: replInner.leadingAnchor, constant: 8),
+            replPrompt.topAnchor.constraint(equalTo: replInner.topAnchor, constant: 6),
+            replPrompt.widthAnchor.constraint(equalToConstant: 14),
+            replField.leadingAnchor.constraint(equalTo: replPrompt.trailingAnchor, constant: 4),
+            replField.trailingAnchor.constraint(equalTo: replInner.trailingAnchor, constant: -8),
+            replField.topAnchor.constraint(equalTo: replInner.topAnchor, constant: 4),
+            replField.heightAnchor.constraint(equalToConstant: 22),
+            replResultLabel.leadingAnchor.constraint(equalTo: replInner.leadingAnchor, constant: 10),
+            replResultLabel.trailingAnchor.constraint(equalTo: replInner.trailingAnchor, constant: -8),
+            replResultLabel.topAnchor.constraint(equalTo: replField.bottomAnchor, constant: 4),
+        ])
+        replHeightC = replWrap.heightAnchor.constraint(equalToConstant: 0)
+        replHeightC.isActive = true
+        // Prevent picks scroll view from overlapping REPL panel when expanded
+        picksScrollView.bottomAnchor.constraint(lessThanOrEqualTo: replWrap.topAnchor, constant: -4).isActive = true
+
         showDisconnectedState()
     }
 
@@ -12717,6 +12896,8 @@ class WebPickerSidebarView: NSView {
         previewSep.isHidden = true
         clearPickList()
         feedbackLabel.isHidden = true
+        replBtn.isHidden = true
+        if replExpanded { toggleREPL() }
         statusLabelTrailingConnected?.isActive = false
         statusLabelTrailingDisconnected?.isActive = true
     }
@@ -12734,6 +12915,7 @@ class WebPickerSidebarView: NSView {
         tabSwitcherBtn.isHidden = true
         hotReloadBtn.isHidden = true
         hideTabBox()
+        replBtn.isHidden = true
         statusLabelTrailingConnected?.isActive = false
         statusLabelTrailingDisconnected?.isActive = true
     }
@@ -12755,6 +12937,7 @@ class WebPickerSidebarView: NSView {
         previewSep.isHidden = false
         tabSwitcherBtn.isHidden = false
         hotReloadBtn.isHidden = false
+        replBtn.isHidden = false
         if picks.isEmpty { restorePicksFromDisk() }
         statusLabelTrailingDisconnected?.isActive = false
         statusLabelTrailingConnected?.isActive = true
@@ -13183,6 +13366,59 @@ class WebPickerSidebarView: NSView {
         watchedPath = nil
     }
 
+    @objc private func toggleREPL() {
+        replExpanded = !replExpanded
+        replBtn.contentTintColor = replExpanded ? Self.teal : NSColor(calibratedWhite: 0.35, alpha: 1)
+        let easing = replExpanded
+            ? CAMediaTimingFunction(controlPoints: 0.34, 1.56, 0.64, 1.0)  // spring (overshoot)
+            : CAMediaTimingFunction(name: .easeIn)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.22
+            ctx.timingFunction = easing
+            self.replHeightC.animator().constant = self.replExpanded ? Self.replH : 0
+        }
+        if replExpanded { window?.makeFirstResponder(replField) }
+    }
+
+    @objc private func evaluateREPL() {
+        let expr = replField.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !expr.isEmpty, isConnected else { return }
+        replHistory.insert(expr, at: 0)
+        if replHistory.count > 20 { replHistory.removeLast() }
+        replHistoryIdx = -1
+        replResultLabel.textColor = Self.teal.withAlphaComponent(0.8)
+        replResultLabel.stringValue = "…"
+        cdp.evaluate(expr) { [weak self] result in
+            guard let self = self else { return }
+            if let inner = result?["result"] as? [String: Any] {
+                if let exc = result?["exceptionDetails"] as? [String: Any],
+                   let msg = (exc["exception"] as? [String: Any])?["description"] as? String {
+                    self.replResultLabel.textColor = NSColor(calibratedRed: 0.9, green: 0.35, blue: 0.35, alpha: 1)
+                    self.replResultLabel.stringValue = "✕ \(msg)"
+                } else {
+                    let t = inner["type"] as? String ?? ""
+                    let val: String
+                    switch t {
+                    case "undefined": val = "undefined"
+                    case "null":      val = "null"
+                    case "string":    val = "\"\(inner["value"] as? String ?? "")\""
+                    case "number":    val = "\(inner["value"] ?? "?")"
+                    case "boolean":   val = "\(inner["value"] ?? "?")"
+                    case "object":
+                        if let sub = inner["subtype"] as? String, sub == "null" { val = "null" }
+                        else { val = inner["description"] as? String ?? "{…}" }
+                    default:          val = inner["description"] as? String ?? t
+                    }
+                    self.replResultLabel.textColor = Self.teal.withAlphaComponent(0.8)
+                    self.replResultLabel.stringValue = "= \(val)"
+                }
+            } else {
+                self.replResultLabel.textColor = NSColor(calibratedWhite: 0.4, alpha: 1)
+                self.replResultLabel.stringValue = "– no response"
+            }
+        }
+    }
+
     // MARK: - Picker
 
     @objc private func navigateURL() {
@@ -13339,6 +13575,9 @@ class WebPickerSidebarView: NSView {
         row.onRightClick = { [weak self] html, selector, innerText, xpath, event in
             self?.showPickContextMenu(html: html, selector: selector, innerText: innerText, xpath: xpath, pickId: id, event: event)
         }
+        row.onStylesRequested = { [weak self] id in
+            self?.fetchComputedStyle(pickId: id)
+        }
         row.onHighlight   = { [weak self] in self?.highlightPick(id: id, hex: hex) }
         row.onUnhighlight = { [weak self] in self?.unhighlightPick(id: id) }
         row.onCopied      = { [weak self] in self?.showCopiedFeedback() }
@@ -13431,6 +13670,25 @@ class WebPickerSidebarView: NSView {
         showCopiedFeedback()
     }
 
+    private func fetchComputedStyle(pickId: Int) {
+        let js = """
+        (function(){
+          var el=document.querySelector('[data-qt-pick-\(pickId)]');
+          if(!el)return null;
+          var s=getComputedStyle(el);
+          var ff=s.fontFamily.split(',')[0].replace(/['"]/g,'').trim();
+          return s.fontSize+' '+ff+' | '+s.color+' bg:'+s.backgroundColor+(s.borderRadius!=='0px'?' r:'+s.borderRadius:'');
+        })()
+        """
+        cdp.evaluate(js) { [weak self] result in
+            guard let self = self,
+                  let inner = result?["result"] as? [String: Any],
+                  let text = inner["value"] as? String, !text.isEmpty else { return }
+            let rows = self.picksStack.arrangedSubviews.compactMap { $0 as? PickRowView }
+            rows.first(where: { $0.currentPickId == pickId })?.showStyles(text: text)
+        }
+    }
+
     private func showPickContextMenu(html: String, selector: String, innerText: String, xpath: String, pickId: Int, event: NSEvent) {
         let menu = NSMenu()
 
@@ -13484,10 +13742,21 @@ class WebPickerSidebarView: NSView {
     }
 
     private func triggerElementScreenshot(pickId: Int) {
-        // Stub — full implementation in Task 8
-        feedbackLabel.stringValue = "Screenshot: coming in Task 8"
-        feedbackLabel.isHidden = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.feedbackLabel.isHidden = true }
+        feedbackLabel.stringValue = "📷 capturing…"; feedbackLabel.isHidden = false
+        cdp.captureElementScreenshot(pickId: pickId) { [weak self] data in
+            guard let self = self else { return }
+            if let data = data, let image = NSImage(data: data) {
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.writeObjects([image])
+                self.feedbackLabel.stringValue = "✓ Screenshot kopiert!"
+            } else {
+                self.feedbackLabel.stringValue = "⚠ Element nicht sichtbar"
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                self?.feedbackLabel.isHidden = true
+            }
+        }
     }
 
     private func showCopiedFeedback() {
@@ -13599,6 +13868,22 @@ extension WebPickerSidebarView: NSTextFieldDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             self?.hideSuggestions()
         }
+    }
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard control === replField else { return false }
+        if commandSelector == #selector(moveUp(_:)) {
+            let next = min(replHistoryIdx + 1, replHistory.count - 1)
+            if next >= 0 { replHistoryIdx = next; replField.stringValue = replHistory[next] }
+            return true
+        }
+        if commandSelector == #selector(moveDown(_:)) {
+            guard replHistoryIdx >= 0 else { return false }
+            let next = replHistoryIdx - 1
+            if next < 0 { replHistoryIdx = -1; replField.stringValue = "" }
+            else { replHistoryIdx = next; replField.stringValue = replHistory[next] }
+            return true
+        }
+        return false
     }
 }
 
