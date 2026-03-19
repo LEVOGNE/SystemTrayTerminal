@@ -9846,7 +9846,6 @@ class GitPanelView: NSView {
     private var gitWatchers: [DispatchSourceFileSystemObject] = []
     private var watchedGitRoot: String?
     private var lastCommitSummary: String?
-    private var undoConfirmPending = false
     private var undoConfirmTimer: Timer?
     private let github = GitHubClient()
 
@@ -10821,7 +10820,7 @@ class GitPanelView: NSView {
     // MARK: - Files Stack
 
     private func rebuildFilesStack() {
-        let key = fileEntries.map { $0.path }.joined(separator: "\n")
+        let key = fileEntries.map { "\($0.x)\($0.y)\($0.path)" }.joined(separator: "\n")
         guard key != lastFilesKey else { return }
         lastFilesKey = key
         expandedDiffFile = nil
@@ -10933,7 +10932,6 @@ class GitPanelView: NSView {
     private func resetUndoConfirmState() {
         undoConfirmTimer?.invalidate()
         undoConfirmTimer = nil
-        undoConfirmPending = false
         undoCommitBtn.title = "↩"
         undoCommitBtn.contentTintColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
     }
@@ -11001,9 +10999,8 @@ class GitPanelView: NSView {
     // MARK: - Actions: Save (Stage All + Commit)
 
     @objc private func undoCommitClicked() {
-        if !undoConfirmPending {
-            undoConfirmPending = true
-            undoCommitBtn.title = "Sicher?"
+        if undoConfirmTimer == nil {
+            undoCommitBtn.title = Loc.sure
             undoCommitBtn.contentTintColor = NSColor(calibratedRed: 1.0, green: 0.35, blue: 0.35, alpha: 1.0)
             undoConfirmTimer?.invalidate()
             undoConfirmTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: false) { [weak self] _ in
@@ -11067,33 +11064,26 @@ class GitPanelView: NSView {
             return
         }
         let ignorePath = gitRoot + "/.gitignore"
-        let fm = FileManager.default
-
-        var existing = ""
-        if fm.fileExists(atPath: ignorePath),
-           let content = try? String(contentsOfFile: ignorePath, encoding: .utf8) {
-            existing = content
-        }
-
-        let lines = existing.components(separatedBy: "\n")
-        if lines.contains(path) {
-            showFeedback("Bereits ignoriert", success: true)
-            return
-        }
-
-        let newContent: String
-        if existing.isEmpty || existing.hasSuffix("\n") {
-            newContent = existing + path + "\n"
-        } else {
-            newContent = existing + "\n" + path + "\n"
-        }
-
-        do {
-            try newContent.write(toFile: ignorePath, atomically: true, encoding: .utf8)
-            showFeedback("→ .gitignore", success: true)
-            refresh()
-        } catch {
-            showFeedback("Schreiben fehlgeschlagen", success: false)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let existing = (try? String(contentsOfFile: ignorePath, encoding: .utf8)) ?? ""
+            let lines = existing.components(separatedBy: "\n")
+            if lines.contains(path) {
+                DispatchQueue.main.async { self.showFeedback("Bereits ignoriert", success: true) }
+                return
+            }
+            let newContent = existing.isEmpty || existing.hasSuffix("\n")
+                ? existing + path + "\n"
+                : existing + "\n" + path + "\n"
+            do {
+                try newContent.write(toFile: ignorePath, atomically: true, encoding: .utf8)
+                DispatchQueue.main.async {
+                    self.showFeedback("→ .gitignore", success: true)
+                    self.refresh()
+                }
+            } catch {
+                DispatchQueue.main.async { self.showFeedback("Schreiben fehlgeschlagen", success: false) }
+            }
         }
     }
 
@@ -11511,37 +11501,25 @@ class ChromeCDPClient: @unchecked Sendable {
     }
 
     /// Captures a screenshot of a specific element identified by its data-qt-pick-N attribute.
-    /// Flow: DOM.getDocument → DOM.querySelector → DOM.getBoxModel → Page.captureScreenshot(clip)
+    /// Flow: DOM.getBoxModel(selector) → Page.captureScreenshot(clip)
     func captureElementScreenshot(pickId: Int, completion: @escaping (Data?) -> Void) {
-        // Step 1: get root node ID
-        cdpCommand("DOM.getDocument", params: ["depth": 0]) { [weak self] docResult in
+        // Step 1: get bounding box directly via CSS attribute selector
+        cdpCommand("DOM.getBoxModel", params: ["selector": "[data-qt-pick-\(pickId)]"]) { [weak self] boxResult in
             guard let self = self,
-                  let root = docResult?["root"] as? [String: Any],
-                  let rootId = root["nodeId"] as? Int else { completion(nil); return }
-            // Step 2: find element node by attribute selector
-            self.cdpCommand("DOM.querySelector",
-                            params: ["nodeId": rootId, "selector": "[data-qt-pick-\(pickId)]"]) { [weak self] qResult in
-                guard let self = self,
-                      let nodeId = qResult?["nodeId"] as? Int, nodeId != 0 else { completion(nil); return }
-                // Step 3: get bounding box
-                self.cdpCommand("DOM.getBoxModel", params: ["nodeId": nodeId]) { [weak self] boxResult in
-                    guard let self = self,
-                          let model = boxResult?["model"] as? [String: Any],
-                          let content = model["content"] as? [Double], content.count >= 6 else { completion(nil); return }
-                    // content = [x1,y1, x2,y1, x2,y2, x1,y2] (quad — quad coordinates)
-                    let x = content[0]; let y = content[1]
-                    let w = content[2] - content[0]; let h = content[5] - content[1]
-                    guard w > 0, h > 0 else { completion(nil); return }
-                    // Step 4: capture screenshot with clip
-                    let clip: [String: Any] = ["x": x, "y": y, "width": w, "height": h, "scale": 1]
-                    self.cdpCommand("Page.captureScreenshot",
-                                    params: ["format": "png", "clip": clip]) { [weak self] ssResult in
-                        guard self != nil else { completion(nil); return }
-                        guard let b64 = ssResult?["data"] as? String,
-                              let data = Data(base64Encoded: b64) else { completion(nil); return }
-                        completion(data)
-                    }
-                }
+                  let model = boxResult?["model"] as? [String: Any],
+                  let content = model["content"] as? [Double], content.count >= 6 else { completion(nil); return }
+            // content = [x1,y1, x2,y1, x2,y2, x1,y2] (quad coordinates)
+            let x = content[0]; let y = content[1]
+            let w = content[2] - content[0]; let h = content[5] - content[1]
+            guard w > 0, h > 0 else { completion(nil); return }
+            // Step 2: capture screenshot with clip
+            let clip: [String: Any] = ["x": x, "y": y, "width": w, "height": h, "scale": 1]
+            self.cdpCommand("Page.captureScreenshot",
+                            params: ["format": "png", "clip": clip]) { [weak self] ssResult in
+                guard self != nil else { completion(nil); return }
+                guard let b64 = ssResult?["data"] as? String,
+                      let data = Data(base64Encoded: b64) else { completion(nil); return }
+                completion(data)
             }
         }
     }
@@ -12514,6 +12492,8 @@ private final class PickRowView: NSView {
 }
 
 class WebPickerSidebarView: NSView {
+    private static let pickerCleanupJS = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';el.style.boxShadow='';});void 0;"
+
     private let cdp = ChromeCDPClient()
     private var pollTimer: Timer?
     private var tabSearchTimer: Timer?
@@ -13183,7 +13163,7 @@ class WebPickerSidebarView: NSView {
         cdp.onDisconnected = nil
         pickBtn.title = Loc.pickElement
         deactivateHotReload()
-        let cleanup = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';el.style.boxShadow='';});void 0;"
+        let cleanup = WebPickerSidebarView.pickerCleanupJS
         if let tid = currentTargetId {
             cdp.evaluate(cleanup) { [weak self] _ in
                 guard let self = self else { return }
@@ -13211,7 +13191,7 @@ class WebPickerSidebarView: NSView {
         cdp.onDisconnected = nil
         pickBtn.title = Loc.pickElement
         deactivateHotReload()
-        let cleanup = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';el.style.boxShadow='';});void 0;"
+        let cleanup = WebPickerSidebarView.pickerCleanupJS
         cdp.evaluate(cleanup) { [weak self] _ in self?.cdp.disconnect() }
         // NOTE: currentTargetId kept intact in UserDefaults so connect() can reconnect to same tab
         showDisconnectedState()
@@ -13638,27 +13618,34 @@ class WebPickerSidebarView: NSView {
           if (window.__qtPickerActive) return 'already_active';
           window.__qtPickerActive = true; window.__qtPickedHTML = null;
 
-          // CSS :hover works even when Chrome is NOT the focused app (browser tracks mouse for cursor).
-          // This is the primary highlight mechanism — no Chrome activation needed.
+          // Crosshair cursor only — hover veil is handled by the JS overlay div below
           var style = document.createElement('style');
           style.id = '__qt_picker_style';
-          style.textContent = '* { cursor: crosshair !important; } *:hover { outline: 2px solid #4ECDC4 !important; outline-offset: -2px !important; }';
+          style.textContent = '* { cursor: crosshair !important; }';
           document.head.appendChild(style);
 
-          // When Chrome HAS focus: JS mouseover upgrades to random per-element colors.
-          var palette = ['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#DDA0DD','#F7DC6F','#FF9F7F','#87CEEB','#BB8FCE','#82E0AA'];
-          function randColor() { return palette[Math.floor(Math.random()*palette.length)]; }
+          // Overlay div — position:fixed keeps it above all content; never clipped by overflow:hidden
+          var ov = document.createElement('div');
+          ov.id = '__qt_pick_ov';
+          ov.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;display:none;border-radius:2px;';
+          document.documentElement.appendChild(ov);
+          document.documentElement.addEventListener('mouseleave', function(){ ov.style.display='none'; });
+
+          var palette = ['rgba(255,107,107,0.28)','rgba(78,205,196,0.28)','rgba(69,183,209,0.28)','rgba(150,206,180,0.28)','rgba(221,160,221,0.28)','rgba(247,220,111,0.28)','rgba(255,159,127,0.28)','rgba(135,206,235,0.28)','rgba(187,143,206,0.28)','rgba(130,224,170,0.28)'];
           var last = null;
           function over(e) {
-            if (!window.__qtPickerActive) return;
-            if (last && last !== e.target) { last.style.outline=''; last.style.outlineOffset=''; }
+            if (!window.__qtPickerActive || e.target === ov || e.target === last) return;
             last = e.target;
-            last.style.outline='2px solid '+randColor(); last.style.outlineOffset='-2px';
+            var r = last.getBoundingClientRect();
+            ov.style.left=r.left+'px'; ov.style.top=r.top+'px';
+            ov.style.width=r.width+'px'; ov.style.height=r.height+'px';
+            ov.style.background=palette[Math.floor(Math.random()*palette.length)];
+            ov.style.display='block';
           }
-          function out(e) { if(e.target===last){e.target.style.outline='';e.target.style.outlineOffset='';} }
+          function out(e) { if(e.target===last){ last=null; ov.style.display='none'; } }
           function pick(e) {
             e.preventDefault(); e.stopPropagation();
-            if (last){last.style.outline='';last.style.outlineOffset='';}
+            ov.remove();
             var s=document.getElementById('__qt_picker_style'); if(s)s.remove();
             var prev=document.querySelector('[data-qt-picked]');
             if(prev) prev.removeAttribute('data-qt-picked');
@@ -13731,14 +13718,18 @@ class WebPickerSidebarView: NSView {
         }
     }
 
+    private func jsEscapeSelector(_ s: String) -> String {
+        s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
     private func highlightPick(id: Int, hex: String, selector: String = "") {
-        let esc = selector.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let esc = jsEscapeSelector(selector)
         let js = "(function(){var el=document.querySelector('[data-qt-pick-\(id)]')||(\"\(esc)\".length?document.querySelector(\"\(esc)\"):null);if(!el)return;var h='\(hex)',r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);el.style.boxShadow='inset 0 0 0 9999px rgba('+r+','+g+','+b+',0.22)';el.scrollIntoView({behavior:'smooth',block:'nearest'});})();void 0;"
         cdp.evaluate(js) { _ in }
     }
 
     private func unhighlightPick(id: Int, selector: String = "") {
-        let esc = selector.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let esc = jsEscapeSelector(selector)
         let js = "(function(){var el=document.querySelector('[data-qt-pick-\(id)]')||(\"\(esc)\".length?document.querySelector(\"\(esc)\"):null);if(el)el.style.boxShadow='';})();void 0;"
         cdp.evaluate(js) { _ in }
     }
@@ -13813,9 +13804,7 @@ class WebPickerSidebarView: NSView {
             nextPickId = max(nextPickId, r.id + 1)
             addPickRow(entry: entry)
             // Re-apply marker in Chrome (best-effort)
-            let selectorJS = entry.selector.isEmpty ? "" : entry.selector
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "\"", with: "\\\"")
+            let selectorJS = entry.selector.isEmpty ? "" : jsEscapeSelector(entry.selector)
             if !selectorJS.isEmpty {
                 cdp.evaluate("(function(){var e=document.querySelector(\"\(selectorJS)\");if(e)e.setAttribute('data-qt-pick-\(r.id)','1');})()", completion: { _ in })
             }
