@@ -3888,6 +3888,7 @@ class TerminalView: NSView {
             case "v": paste(); return
             case "c": copyText(nil); return
             case "a": selectAll(nil); return
+            case "z": writePTY(Data([0x1F])); return   // Cmd+Z → undo (Ctrl+_, readline undo)
             case "\\": writePTY(Data([0x15])); return // Cmd+\ → kill line (Ctrl+U)
             case "d", "D":
                 if let d = NSApp.delegate as? AppDelegate {
@@ -9812,7 +9813,7 @@ class GitPanelView: NSView {
     private var isRefreshing = false
     private var feedbackTimer: Timer?
     private var gitWatchers: [DispatchSourceFileSystemObject] = []
-    private var watchedGitRoot = ""
+    private var watchedGitRoot: String?
     private let github = GitHubClient()
 
     private var isGitRepo = false
@@ -10534,7 +10535,7 @@ class GitPanelView: NSView {
     private func stopWatchers() {
         gitWatchers.forEach { $0.cancel() }
         gitWatchers = []
-        watchedGitRoot = ""
+        watchedGitRoot = nil
     }
 
     private func startWatchers(gitRoot: String) {
@@ -12407,7 +12408,6 @@ class WebPickerSidebarView: NSView {
     private let hotReloadBtn      = NSButton()
     private let tabBox            = NSView()
     private var tabBoxH: NSLayoutConstraint!
-    private var tabBoxVisible     = false
 
     // ── Hot Reload ──
     private var hotReloadEnabled  = false
@@ -12415,7 +12415,6 @@ class WebPickerSidebarView: NSView {
     private var hotReloadPollTimer: Timer?
     private var watchedPath: String?
     private var watchedFileMtimes: [String: Date] = [:]
-    private var watchedFileCount  = 0
     private let watchRow          = NSView()
     private let watchFolderBtn    = NSButton()
     private let watchStatusLabel  = NSTextField(labelWithString: "")
@@ -13033,10 +13032,7 @@ class WebPickerSidebarView: NSView {
         isConnected = false
         cdp.onDisconnected = nil
         pickBtn.title = Loc.pickElement
-        stopWatching()
-        hotReloadEnabled = false
-        hotReloadBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
-        hideWatchRow()
+        deactivateHotReload()
         let cleanup = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';});void 0;"
         if let tid = currentTargetId {
             cdp.evaluate(cleanup) { [weak self] _ in
@@ -13064,10 +13060,7 @@ class WebPickerSidebarView: NSView {
         isConnected = false
         cdp.onDisconnected = nil
         pickBtn.title = Loc.pickElement
-        stopWatching()
-        hotReloadEnabled = false
-        hotReloadBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
-        hideWatchRow()
+        deactivateHotReload()
         let cleanup = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';});void 0;"
         cdp.evaluate(cleanup) { [weak self] _ in self?.cdp.disconnect() }
         // NOTE: currentTargetId kept intact in UserDefaults so connect() can reconnect to same tab
@@ -13100,9 +13093,7 @@ class WebPickerSidebarView: NSView {
         titlePollTimer?.invalidate(); titlePollTimer = nil
         currentTargetId = nil
         cdp.disconnect()
-        stopWatching(); hotReloadEnabled = false
-        hotReloadBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
-        hideWatchRow()
+        deactivateHotReload()
         showDisconnectedState()
         setStatusText(message)
     }
@@ -13205,8 +13196,7 @@ class WebPickerSidebarView: NSView {
     // MARK: - Tab Switcher
 
     @objc private func toggleTabSwitcher() {
-        if tabBoxVisible { hideTabBox(); return }
-        tabBoxVisible = true
+        if !tabBox.isHidden { hideTabBox(); return }
         tabBox.subviews.forEach { $0.removeFromSuperview() }
         // Fetch tab list from Chrome HTTP endpoint
         guard let url = URL(string: "http://localhost:\(ChromeCDPClient.debugPort)/json/list") else { return }
@@ -13215,13 +13205,12 @@ class WebPickerSidebarView: NSView {
             guard let self = self,
                   let data = data,
                   let tabs = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-                DispatchQueue.main.async { [weak self] in self?.tabBoxVisible = false }
                 return
             }
             let pages = Array(tabs.filter { ($0["type"] as? String) == "page" }.prefix(8))
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                guard !pages.isEmpty else { self.tabBoxVisible = false; return }
+                guard !pages.isEmpty else { return }
                 let rowH: CGFloat = 24
                 for (i, tab) in pages.enumerated() {
                     let title  = (tab["title"]  as? String ?? "").isEmpty ? (tab["url"] as? String ?? "") : (tab["title"] as? String ?? "")
@@ -13254,7 +13243,6 @@ class WebPickerSidebarView: NSView {
     }
 
     private func hideTabBox() {
-        tabBoxVisible = false
         tabBox.isHidden = true
         tabBox.subviews.forEach { $0.removeFromSuperview() }
         tabBoxH.constant = 0
@@ -13351,17 +13339,21 @@ class WebPickerSidebarView: NSView {
         stopWatching()
         watchedPath = directory
         watchedFileMtimes = scanMtimes(directory: directory)
-        watchedFileCount = watchedFileMtimes.count
         hotReloadPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             guard let self = self, let dir = self.watchedPath else { return }
-            let current = self.scanMtimes(directory: dir)
-            if current != self.watchedFileMtimes {
-                self.watchedFileMtimes = current
-                self.triggerHotReload()
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                guard let self = self else { return }
+                let current = self.scanMtimes(directory: dir)
+                DispatchQueue.main.async {
+                    if current != self.watchedFileMtimes {
+                        self.watchedFileMtimes = current
+                        self.triggerHotReload()
+                    }
+                }
             }
         }
         let dirName = URL(fileURLWithPath: directory).lastPathComponent
-        watchStatusLabel.stringValue = "● \(watchedFileCount) files in \(dirName)"
+        watchStatusLabel.stringValue = "● \(watchedFileMtimes.count) files in \(dirName)"
         showWatchRow(forLocalhost: true)
     }
 
@@ -13413,6 +13405,13 @@ class WebPickerSidebarView: NSView {
         hotReloadPollTimer?.invalidate(); hotReloadPollTimer = nil
         watchedFileMtimes = [:]
         watchedPath = nil
+    }
+
+    private func deactivateHotReload() {
+        stopWatching()
+        hotReloadEnabled = false
+        hotReloadBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+        hideWatchRow()
     }
 
     @objc private func toggleREPL() {
@@ -13741,7 +13740,7 @@ class WebPickerSidebarView: NSView {
     private func showPickContextMenu(html: String, selector: String, innerText: String, xpath: String, pickId: Int, event: NSEvent) {
         let menu = NSMenu()
 
-        let htmlItem = NSMenuItem(title: "outerHTML", action: #selector(menuCopyHTML(_:)), keyEquivalent: "")
+        let htmlItem = NSMenuItem(title: "outerHTML", action: #selector(menuCopyAny(_:)), keyEquivalent: "")
         htmlItem.representedObject = html; htmlItem.target = self; htmlItem.state = .on
         menu.addItem(htmlItem)
 
@@ -13764,13 +13763,6 @@ class WebPickerSidebarView: NSView {
         menu.addItem(ssItem)
 
         NSMenu.popUpContextMenu(menu, with: event, for: self)
-    }
-
-    @objc private func menuCopyHTML(_ item: NSMenuItem) {
-        guard let s = item.representedObject as? String else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(s, forType: .string)
-        showCopiedFeedback()
     }
 
     @objc private func menuCopyAny(_ item: NSMenuItem) {
