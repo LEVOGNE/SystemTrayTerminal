@@ -9811,6 +9811,8 @@ class GitPanelView: NSView {
     private var refreshTimer: Timer?
     private var isRefreshing = false
     private var feedbackTimer: Timer?
+    private var gitWatchers: [DispatchSourceFileSystemObject] = []
+    private var watchedGitRoot = ""
     private let github = GitHubClient()
 
     private var isGitRepo = false
@@ -9853,6 +9855,7 @@ class GitPanelView: NSView {
     private let projectLabel = NSTextField(labelWithString: "")
     private let branchBadge = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "")
+    private let refreshBtn = NSButton()
 
     // MARK: - UI: No-Repo Card
 
@@ -9954,6 +9957,7 @@ class GitPanelView: NSView {
 
     @objc private func moveUpTapped()   { onMoveUp?() }
     @objc private func moveDownTapped() { onMoveDown?() }
+    @objc private func refreshBtnTapped() { refresh() }
 
     // MARK: - Language Refresh
 
@@ -10114,7 +10118,20 @@ class GitPanelView: NSView {
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let topRow = NSStackView(views: [projectLabel, branchBadge])
+        refreshBtn.title = "↻"
+        refreshBtn.font = NSFont.systemFont(ofSize: 14, weight: .regular)
+        refreshBtn.isBordered = false
+        refreshBtn.contentTintColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
+        refreshBtn.target = self
+        refreshBtn.action = #selector(refreshBtnTapped)
+        refreshBtn.translatesAutoresizingMaskIntoConstraints = false
+        refreshBtn.setContentHuggingPriority(.required, for: .horizontal)
+
+        let spacer = NSView()
+        spacer.translatesAutoresizingMaskIntoConstraints = false
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        let topRow = NSStackView(views: [projectLabel, branchBadge, spacer, refreshBtn])
         topRow.orientation = .horizontal
         topRow.spacing = 8
         topRow.alignment = .centerY
@@ -10514,13 +10531,36 @@ class GitPanelView: NSView {
         ])
     }
 
+    private func stopWatchers() {
+        gitWatchers.forEach { $0.cancel() }
+        gitWatchers = []
+        watchedGitRoot = ""
+    }
+
+    private func startWatchers(gitRoot: String) {
+        guard gitRoot != watchedGitRoot else { return }
+        stopWatchers()
+        watchedGitRoot = gitRoot
+        let paths = [gitRoot + "/.git/HEAD", gitRoot + "/.git/index"]
+        for path in paths {
+            let fd = open(path, O_EVTONLY)
+            guard fd >= 0 else { continue }
+            let src = DispatchSource.makeFileSystemObjectSource(
+                fileDescriptor: fd, eventMask: [.write, .extend, .rename, .delete], queue: .main)
+            src.setEventHandler { [weak self] in self?.refresh() }
+            src.setCancelHandler { close(fd) }
+            src.resume()
+            gitWatchers.append(src)
+        }
+    }
+
     // MARK: - Public API (called by AppDelegate)
 
     func startRefreshing(cwd: String) {
         lastCwd = cwd
         refresh()
         refreshTimer?.invalidate()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             self?.refresh()
         }
     }
@@ -10529,12 +10569,14 @@ class GitPanelView: NSView {
         guard cwd != lastCwd else { return }
         lastCwd = cwd
         github.cache = GitHubClient.RemoteCache()
+        stopWatchers()
         refresh()
     }
 
     func stopRefreshing() {
         refreshTimer?.invalidate()
         refreshTimer = nil
+        stopWatchers()
     }
 
     // MARK: - Git Helpers
@@ -10595,7 +10637,7 @@ class GitPanelView: NSView {
             typealias GitResult = (isRepo: Bool, branch: String, hasRemote: Bool,
                                    ahead: Int, behind: Int,
                                    entries: [(path: String, x: Character, y: Character, attr: NSAttributedString)],
-                                   projectName: String)
+                                   projectName: String, topLevel: String?)
             let result: GitResult = await withCheckedContinuation { cont in
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     guard let self = self else { return }
@@ -10643,7 +10685,7 @@ class GitPanelView: NSView {
                         }
                     }
                     let projectName = (cwd as NSString).lastPathComponent
-                    cont.resume(returning: (isRepo, branch, hasRemote, aheadCount, behindCount, entries, projectName))
+                    cont.resume(returning: (isRepo, branch, hasRemote, aheadCount, behindCount, entries, projectName, topLevel))
                 }
             }
 
@@ -10658,7 +10700,13 @@ class GitPanelView: NSView {
             self.updateLayout(projectName: result.projectName)
             self.refreshGithubStatus(cwd: cwd)
 
-            let newInterval: TimeInterval = result.isRepo ? 3.0 : 30.0
+            if result.isRepo, let top = result.topLevel {
+                self.startWatchers(gitRoot: top)
+            } else {
+                self.stopWatchers()
+            }
+
+            let newInterval: TimeInterval = result.isRepo ? 5.0 : 30.0
             if let t = self.refreshTimer, abs(t.timeInterval - newInterval) > 0.1 {
                 self.refreshTimer?.invalidate()
                 self.refreshTimer = Timer.scheduledTimer(withTimeInterval: newInterval, repeats: true) { [weak self] _ in
@@ -11050,6 +11098,7 @@ class GitPanelView: NSView {
     }
 
     deinit {
+        stopWatchers()
         refreshTimer?.invalidate()
         feedbackTimer?.invalidate()
         NotificationCenter.default.removeObserver(self, name: .appLanguageChanged, object: nil)
@@ -21332,7 +21381,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
 
             let shell = tabInfo["shell"] as? String ?? "/bin/zsh"
-            let cwd = tabInfo["cwd"] as? String
+            let rawCwd = tabInfo["cwd"] as? String
+            // Only restore cwd if it's a real user directory (not "/" which is the proc_pidinfo fallback)
+            let cwd = (rawCwd == nil || rawCwd == "/" || rawCwd?.isEmpty == true) ? nil : rawCwd
             let hue = tabInfo["colorHue"] as? Double
             let savedTabId = tabInfo["tabId"] as? String
             createTab(shell: shell, cwd: cwd, colorHue: hue.map { CGFloat($0) }, tabId: savedTabId)
