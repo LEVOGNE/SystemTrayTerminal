@@ -12108,14 +12108,23 @@ private final class PickRowView: NSView {
     var onUnhighlight: (() -> Void)?
     var onRemove: (() -> Void)?
     var onCopied: (() -> Void)?
+    var onRightClick: ((_ html: String, _ selector: String, _ innerText: String, _ xpath: String, _ event: NSEvent) -> Void)?
+    private(set) var currentPickId: Int = 0
+    private var storedSelector: String = ""
+    private var storedInnerText: String = ""
+    private var storedXPath: String = ""
     private let xBtn = NSButton()
     private let labelScroll = NSScrollView()
     private var rowArea: NSTrackingArea?
     private var xArea: NSTrackingArea?
     private var html: String = ""
 
-    init(html: String, color: NSColor) {
+    init(html: String, color: NSColor, selector: String = "", innerText: String = "", xpath: String = "", pickId: Int = 0) {
         self.html = html
+        self.storedSelector = selector
+        self.storedInnerText = innerText
+        self.storedXPath = xpath
+        self.currentPickId = pickId
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
@@ -12200,6 +12209,10 @@ private final class PickRowView: NSView {
         }
     }
 
+    override func rightMouseDown(with event: NSEvent) {
+        onRightClick?(html, storedSelector, storedInnerText, storedXPath, event)
+    }
+
     override func mouseDown(with event: NSEvent) {
         let pt = convert(event.locationInWindow, from: nil)
         if !xBtn.frame.contains(pt) {
@@ -12256,10 +12269,19 @@ class WebPickerSidebarView: NSView {
     private let picksSep           = NSView()
     private let clearPicksBtn      = NSButton()
     private let picksStack         = NSStackView()
+    private let picksScrollView    = NSScrollView()
     private let feedbackLabel      = NSTextField(labelWithString: "")
     private var statusLabelTrailingConnected: NSLayoutConstraint!
     private var statusLabelTrailingDisconnected: NSLayoutConstraint!
-    private struct PickEntry { let id: Int; let html: String; let hex: String; let color: NSColor }
+    private struct PickEntry {
+        let id: Int; let html: String; let hex: String; let color: NSColor
+        var selector: String = ""; var innerText: String = ""; var xpath: String = ""
+    }
+    private struct PickEntryRecord: Codable {
+        let id: Int; let html: String; let hex: String
+        let selector: String; let innerText: String; let xpath: String
+    }
+    private static let picksKey = "webPickerPicks"
     private var picks: [PickEntry] = []
     private var nextPickId = 0
 
@@ -12443,7 +12465,21 @@ class WebPickerSidebarView: NSView {
         picksStack.alignment = .leading
         picksStack.distribution = .fillProportionally
         picksStack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(picksStack)
+
+        picksScrollView.drawsBackground = false
+        picksScrollView.hasVerticalScroller = true
+        picksScrollView.scrollerStyle = .overlay
+        picksScrollView.autohidesScrollers = true
+        picksScrollView.automaticallyAdjustsContentInsets = false
+        picksScrollView.translatesAutoresizingMaskIntoConstraints = false
+        let picksClip = FlippedClipView()
+        picksClip.drawsBackground = false
+        picksScrollView.contentView = picksClip
+        picksScrollView.documentView = picksStack
+        addSubview(picksScrollView)
+
+        picksStack.widthAnchor.constraint(equalTo: picksScrollView.contentView.widthAnchor).isActive = true
+        picksStack.topAnchor.constraint(equalTo: picksClip.topAnchor).isActive = true
 
         feedbackLabel.font = NSFont.systemFont(ofSize: 9.5, weight: .medium)
         feedbackLabel.textColor = Self.teal
@@ -12515,13 +12551,14 @@ class WebPickerSidebarView: NSView {
             picksSep.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             picksSep.topAnchor.constraint(equalTo: picksHeaderLabel.bottomAnchor, constant: 5),
             picksSep.heightAnchor.constraint(equalToConstant: 1),
-            // ── Picks list ──
-            picksStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            picksStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            picksStack.topAnchor.constraint(equalTo: picksSep.bottomAnchor, constant: 5),
+            // ── Picks scroll view ──
+            picksScrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            picksScrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            picksScrollView.topAnchor.constraint(equalTo: picksSep.bottomAnchor, constant: 5),
+            picksScrollView.heightAnchor.constraint(lessThanOrEqualToConstant: 200),
             // ── Feedback ──
             feedbackLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            feedbackLabel.topAnchor.constraint(equalTo: picksStack.bottomAnchor, constant: 6),
+            feedbackLabel.topAnchor.constraint(equalTo: picksScrollView.bottomAnchor, constant: 6),
         ])
 
         // Dynamic statusLabel trailing — narrow when disconnect visible, full when hidden
@@ -12613,6 +12650,7 @@ class WebPickerSidebarView: NSView {
         styleTealButton(pickBtn, enabled: !navigating)
         disconnectBtn.isHidden = false
         previewSep.isHidden = false
+        if picks.isEmpty { restorePicksFromDisk() }
         statusLabelTrailingDisconnected?.isActive = false
         statusLabelTrailingConnected?.isActive = true
     }
@@ -12862,7 +12900,35 @@ class WebPickerSidebarView: NSView {
             var prev=document.querySelector('[data-qt-picked]');
             if(prev) prev.removeAttribute('data-qt-picked');
             e.target.setAttribute('data-qt-picked','1');
-            window.__qtPickedHTML=e.target.outerHTML; window.__qtPickerActive=false;
+            window.__qtPickedHTML=e.target.outerHTML;
+            window.__qtPickedMeta=(function(el){
+              function escCss(s){return s.replace(/[^a-zA-Z0-9_-]/g,function(c){return'\\\\'+c;});}
+              function getCssSel(el){
+                if(el.id)return'#'+escCss(el.id);
+                var p=[];
+                while(el&&el.nodeType===1&&el!==document.body){
+                  var seg=el.tagName.toLowerCase();
+                  var sibs=[].filter.call(el.parentElement?el.parentElement.children:[],function(s){return s.tagName===el.tagName;});
+                  if(sibs.length>1)seg+=':nth-child('+([].indexOf.call(el.parentElement.children,el)+1)+')';
+                  if(el.classList&&el.classList.length)seg+='.'+[].slice.call(el.classList,0,2).map(escCss).join('.');
+                  if(el.id){p.unshift('#'+escCss(el.id));break;}
+                  p.unshift(seg);el=el.parentElement;
+                }
+                return p.join(' > ');
+              }
+              function getXP(el){
+                var parts=[];
+                while(el&&el.nodeType===1){
+                  var idx=[].filter.call(el.parentNode?el.parentNode.children:[],function(s){return s.tagName===el.tagName;}).indexOf(el)+1;
+                  parts.unshift(el.tagName.toLowerCase()+(idx>1?'['+idx+']':''));
+                  el=el.parentNode;
+                  if(el===document.body){parts.unshift('body');break;}
+                }
+                return '/'+parts.join('/');
+              }
+              return JSON.stringify({selector:getCssSel(el),innerText:(el.innerText||'').trim().substring(0,500),xpath:getXP(el)});
+            })(e.target);
+            window.__qtPickerActive=false;
             document.removeEventListener('mouseover',over,true);
             document.removeEventListener('mouseout',out,true);
             document.removeEventListener('click',pick,true);
@@ -12877,12 +12943,26 @@ class WebPickerSidebarView: NSView {
             guard let self = self else { return }
             self.pollTimer?.invalidate()
             self.pollTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
-                self?.cdp.evaluate("typeof window.__qtPickedHTML!=='undefined'&&window.__qtPickedHTML!==null?window.__qtPickedHTML:null") { [weak self] result in
+                self?.cdp.evaluate("""
+                    (function(){
+                      if(typeof window.__qtPickedHTML==='undefined'||window.__qtPickedHTML===null)return null;
+                      var meta={};
+                      try{if(window.__qtPickedMeta)meta=JSON.parse(window.__qtPickedMeta);}catch(e){}
+                      return JSON.stringify({html:window.__qtPickedHTML,meta:meta});
+                    })()
+                    """) { [weak self] result in
                     guard let self = self,
                           let inner = (result?["result"] as? [String: Any]),
-                          let val = inner["value"] as? String, !val.isEmpty else { return }
+                          let jsonStr = inner["value"] as? String, !jsonStr.isEmpty,
+                          let data = jsonStr.data(using: .utf8),
+                          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let html = obj["html"] as? String, !html.isEmpty else { return }
                     self.pollTimer?.invalidate(); self.pollTimer = nil
-                    self.onHTMLPicked(val)
+                    let meta = obj["meta"] as? [String: Any] ?? [:]
+                    let selector = meta["selector"] as? String ?? ""
+                    let innerText = meta["innerText"] as? String ?? ""
+                    let xpath     = meta["xpath"] as? String ?? ""
+                    self.onHTMLPicked(html, selector: selector, innerText: innerText, xpath: xpath)
                 }
             }
         }
@@ -12905,6 +12985,7 @@ class WebPickerSidebarView: NSView {
         picksHeaderLabel.isHidden = true
         picksSep.isHidden = true
         clearPicksBtn.isHidden = true
+        UserDefaults.standard.removeObject(forKey: Self.picksKey)
     }
 
     @objc private func clearAllPicksAction() {
@@ -12921,23 +13002,14 @@ class WebPickerSidebarView: NSView {
         // List stays — only browser marks are cleared
     }
 
-    private func onHTMLPicked(_ html: String) {
-        // FIFO: remove oldest if already at 5
-        if picks.count >= 5, let oldest = picks.first {
-            cdp.evaluate("var e=document.querySelector('[data-qt-pick-\(oldest.id)]');if(e)e.removeAttribute('data-qt-pick-\(oldest.id)');") { _ in }
-            picks.removeFirst()
-            picksStack.arrangedSubviews.first?.removeFromSuperview()
+    private func addPickRow(entry: PickEntry) {
+        let id = entry.id; let hex = entry.hex; let color = entry.color
+        let row = PickRowView(html: entry.html, color: color,
+                              selector: entry.selector, innerText: entry.innerText,
+                              xpath: entry.xpath, pickId: id)
+        row.onRightClick = { [weak self] html, selector, innerText, xpath, event in
+            self?.showPickContextMenu(html: html, selector: selector, innerText: innerText, xpath: xpath, pickId: id, event: event)
         }
-
-        let id = nextPickId; nextPickId += 1
-        let (color, hex) = Self.pickColors[id % Self.pickColors.count]
-        picks.append(PickEntry(id: id, html: html, hex: hex, color: color))
-
-        // Relabel data-qt-picked → data-qt-pick-N in browser
-        cdp.evaluate("var e=document.querySelector('[data-qt-picked]');if(e){e.removeAttribute('data-qt-picked');e.setAttribute('data-qt-pick-\(id)','1');}") { _ in }
-
-        // Add row to picks list
-        let row = PickRowView(html: html, color: color)
         row.onHighlight   = { [weak self] in self?.highlightPick(id: id, hex: hex) }
         row.onUnhighlight = { [weak self] in self?.unhighlightPick(id: id) }
         row.onCopied      = { [weak self] in self?.showCopiedFeedback() }
@@ -12946,9 +13018,65 @@ class WebPickerSidebarView: NSView {
             self.cdp.evaluate("var e=document.querySelector('[data-qt-pick-\(id)]');if(e)e.removeAttribute('data-qt-pick-\(id)');") { _ in }
             self.picks.removeAll { $0.id == id }
             row.removeFromSuperview()
+            self.savePicksToDisk()
         }
         picksStack.addArrangedSubview(row)
-        row.widthAnchor.constraint(equalTo: picksStack.widthAnchor).isActive = true
+        row.widthAnchor.constraint(equalTo: picksScrollView.contentView.widthAnchor).isActive = true
+    }
+
+    private func savePicksToDisk() {
+        let records = picks.map { PickEntryRecord(id: $0.id, html: $0.html, hex: $0.hex,
+                                                  selector: $0.selector, innerText: $0.innerText, xpath: $0.xpath) }
+        if let data = try? JSONEncoder().encode(records) {
+            UserDefaults.standard.set(data, forKey: Self.picksKey)
+        }
+    }
+
+    private func restorePicksFromDisk() {
+        guard let data = UserDefaults.standard.data(forKey: Self.picksKey),
+              let records = try? JSONDecoder().decode([PickEntryRecord].self, from: data) else { return }
+        for r in records {
+            let colorIdx = r.id % Self.pickColors.count
+            let (color, _) = Self.pickColors[colorIdx]
+            var entry = PickEntry(id: r.id, html: r.html, hex: r.hex, color: color)
+            entry.selector = r.selector; entry.innerText = r.innerText; entry.xpath = r.xpath
+            picks.append(entry)
+            nextPickId = max(nextPickId, r.id + 1)
+            addPickRow(entry: entry)
+            // Re-apply marker in Chrome (best-effort)
+            let selectorJS = entry.selector.isEmpty ? "" : entry.selector
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            if !selectorJS.isEmpty {
+                cdp.evaluate("(function(){var e=document.querySelector(\"\(selectorJS)\");if(e)e.setAttribute('data-qt-pick-\(r.id)','1');})()", completion: { _ in })
+            }
+        }
+        if !picks.isEmpty {
+            picksHeaderLabel.isHidden = false
+            picksSep.isHidden = false
+            clearPicksBtn.isHidden = false
+        }
+    }
+
+    private func onHTMLPicked(_ html: String, selector: String = "", innerText: String = "", xpath: String = "") {
+        // FIFO: remove oldest if already at 5
+        if picks.count >= 20, let oldest = picks.first {
+            cdp.evaluate("var e=document.querySelector('[data-qt-pick-\(oldest.id)]');if(e)e.removeAttribute('data-qt-pick-\(oldest.id)');") { _ in }
+            picks.removeFirst()
+            picksStack.arrangedSubviews.first?.removeFromSuperview()
+        }
+
+        let id = nextPickId; nextPickId += 1
+        let (color, hex) = Self.pickColors[id % Self.pickColors.count]
+        var entry = PickEntry(id: id, html: html, hex: hex, color: color)
+        entry.selector = selector; entry.innerText = innerText; entry.xpath = xpath
+        picks.append(entry)
+
+        // Relabel data-qt-picked → data-qt-pick-N in browser
+        cdp.evaluate("var e=document.querySelector('[data-qt-picked]');if(e){e.removeAttribute('data-qt-picked');e.setAttribute('data-qt-pick-\(id)','1');}") { _ in }
+
+        addPickRow(entry: picks.last!)
+        savePicksToDisk()
 
         // Show picks header if first pick
         if picks.count == 1 {
@@ -12972,6 +13100,65 @@ class WebPickerSidebarView: NSView {
             vDown?.post(tap: .cghidEventTap); vUp?.post(tap: .cghidEventTap)
         }
         showCopiedFeedback()
+    }
+
+    private func showPickContextMenu(html: String, selector: String, innerText: String, xpath: String, pickId: Int, event: NSEvent) {
+        let menu = NSMenu()
+
+        let htmlItem = NSMenuItem(title: "outerHTML", action: #selector(menuCopyHTML(_:)), keyEquivalent: "")
+        htmlItem.representedObject = html; htmlItem.target = self; htmlItem.state = .on
+        menu.addItem(htmlItem)
+
+        let textItem = NSMenuItem(title: "innerText", action: #selector(menuCopyAny(_:)), keyEquivalent: "")
+        textItem.representedObject = innerText; textItem.target = self
+        menu.addItem(textItem)
+
+        let selItem = NSMenuItem(title: "CSS Selector", action: #selector(menuCopyAny(_:)), keyEquivalent: "")
+        selItem.representedObject = selector; selItem.target = self
+        menu.addItem(selItem)
+
+        let xpItem = NSMenuItem(title: "XPath", action: #selector(menuCopyAny(_:)), keyEquivalent: "")
+        xpItem.representedObject = xpath; xpItem.target = self
+        menu.addItem(xpItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let ssItem = NSMenuItem(title: "Screenshot kopieren", action: #selector(menuScreenshot(_:)), keyEquivalent: "")
+        ssItem.representedObject = pickId; ssItem.target = self
+        menu.addItem(ssItem)
+
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc private func menuCopyHTML(_ item: NSMenuItem) {
+        guard let s = item.representedObject as? String else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(s, forType: .string)
+        showCopiedFeedback()
+    }
+
+    @objc private func menuCopyAny(_ item: NSMenuItem) {
+        guard let s = item.representedObject as? String, !s.isEmpty else {
+            feedbackLabel.stringValue = "–– not available"
+            feedbackLabel.isHidden = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.feedbackLabel.isHidden = true }
+            return
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(s, forType: .string)
+        showCopiedFeedback()
+    }
+
+    @objc private func menuScreenshot(_ item: NSMenuItem) {
+        guard let pickId = item.representedObject as? Int else { return }
+        triggerElementScreenshot(pickId: pickId)
+    }
+
+    private func triggerElementScreenshot(pickId: Int) {
+        // Stub — full implementation in Task 8
+        feedbackLabel.stringValue = "Screenshot: coming in Task 8"
+        feedbackLabel.isHidden = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.feedbackLabel.isHidden = true }
     }
 
     private func showCopiedFeedback() {

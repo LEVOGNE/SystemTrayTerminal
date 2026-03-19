@@ -1441,6 +1441,36 @@ func testBuildPrintOptions() {
 testBuildPrintOptions()
 
 // ============================================================================
+// MARK: - WebPicker Persistence Tests
+// ============================================================================
+
+struct PickEntryRecord: Codable {
+    let id: Int
+    let html: String
+    let hex: String
+    let selector: String
+    let innerText: String
+    let xpath: String
+}
+
+test("PickEntryRecord encodes and decodes round-trip") {
+    let original = PickEntryRecord(id: 3, html: "<div>test</div>", hex: "#FF6B6B",
+                                   selector: "#main > div", innerText: "test",
+                                   xpath: "body/main/div")
+    guard let data = try? JSONEncoder().encode([original]),
+          let decoded = try? JSONDecoder().decode([PickEntryRecord].self, from: data),
+          let first = decoded.first else {
+        testsFailed += 1
+        print("  FAIL: PickEntryRecord encodes and decodes round-trip — encode/decode failed")
+        return
+    }
+    check(first.id == 3, "id survives round-trip")
+    check(first.html == "<div>test</div>", "html survives round-trip")
+    check(first.selector == "#main > div", "selector survives round-trip")
+    check(first.xpath == "body/main/div", "xpath survives round-trip")
+}
+
+// ============================================================================
 // MARK: - Results
 // ============================================================================
 
