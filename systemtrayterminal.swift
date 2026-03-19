@@ -9814,6 +9814,9 @@ class GitPanelView: NSView {
     private var feedbackTimer: Timer?
     private var gitWatchers: [DispatchSourceFileSystemObject] = []
     private var watchedGitRoot: String?
+    private var lastCommitSummary: String?
+    private var undoConfirmPending = false
+    private var undoConfirmTimer: Timer?
     private let github = GitHubClient()
 
     private var isGitRepo = false
@@ -9875,6 +9878,9 @@ class GitPanelView: NSView {
     private let commitField = NSTextField()
     private let saveBtn = NSButton()
     private let feedbackLabel = NSTextField(labelWithString: "")
+    private let undoCommitRow = NSStackView()
+    private let undoCommitLabel = NSTextField(labelWithString: "")
+    private let undoCommitBtn = NSButton()
 
     // MARK: - UI: GitHub Card
 
@@ -10277,11 +10283,33 @@ class GitPanelView: NSView {
         feedbackLabel.lineBreakMode = .byWordWrapping
         feedbackLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let inner = NSStackView(views: [commitHeaderLabel, commitField, saveBtn, feedbackLabel])
+        undoCommitLabel.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+        undoCommitLabel.textColor = NSColor(calibratedWhite: 0.4, alpha: 1.0)
+        undoCommitLabel.translatesAutoresizingMaskIntoConstraints = false
+        undoCommitLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        undoCommitBtn.title = "↩"
+        undoCommitBtn.isBordered = false
+        undoCommitBtn.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        undoCommitBtn.contentTintColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
+        undoCommitBtn.target = self
+        undoCommitBtn.action = #selector(undoCommitClicked)
+        undoCommitBtn.translatesAutoresizingMaskIntoConstraints = false
+        undoCommitBtn.setContentHuggingPriority(.required, for: .horizontal)
+
+        undoCommitRow.orientation = .horizontal
+        undoCommitRow.spacing = 6
+        undoCommitRow.alignment = .centerY
+        undoCommitRow.translatesAutoresizingMaskIntoConstraints = false
+        undoCommitRow.addArrangedSubview(undoCommitLabel)
+        undoCommitRow.addArrangedSubview(undoCommitBtn)
+
+        let inner = NSStackView(views: [commitHeaderLabel, commitField, saveBtn, feedbackLabel, undoCommitRow])
         inner.orientation = .vertical
         inner.alignment = .leading
         inner.spacing = 8
         inner.translatesAutoresizingMaskIntoConstraints = false
+        inner.setCustomSpacing(12, after: feedbackLabel)
         commitCard.addSubview(inner)
 
         NSLayoutConstraint.activate([
@@ -10294,6 +10322,7 @@ class GitPanelView: NSView {
             saveBtn.widthAnchor.constraint(equalTo: inner.widthAnchor),
             saveBtn.heightAnchor.constraint(equalToConstant: 30),
             feedbackLabel.widthAnchor.constraint(equalTo: inner.widthAnchor),
+            undoCommitRow.widthAnchor.constraint(equalTo: inner.widthAnchor),
         ])
 
         contentStack.addArrangedSubview(commitCard)
@@ -10638,7 +10667,7 @@ class GitPanelView: NSView {
             typealias GitResult = (isRepo: Bool, branch: String, hasRemote: Bool,
                                    ahead: Int, behind: Int,
                                    entries: [(path: String, x: Character, y: Character, attr: NSAttributedString)],
-                                   projectName: String, topLevel: String?)
+                                   projectName: String, topLevel: String?, lastCommit: String?)
             let result: GitResult = await withCheckedContinuation { cont in
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     guard let self = self else { return }
@@ -10686,7 +10715,8 @@ class GitPanelView: NSView {
                         }
                     }
                     let projectName = (cwd as NSString).lastPathComponent
-                    cont.resume(returning: (isRepo, branch, hasRemote, aheadCount, behindCount, entries, projectName, topLevel))
+                    let lastCommit = isRepo ? self.runGit(["log", "-1", "--pretty=format:%h %s"], cwd: cwd) : nil
+                    cont.resume(returning: (isRepo, branch, hasRemote, aheadCount, behindCount, entries, projectName, topLevel, lastCommit))
                 }
             }
 
@@ -10698,6 +10728,7 @@ class GitPanelView: NSView {
             self.behind = result.behind
             self.hasRemote = result.hasRemote
             self.fileEntries = result.entries
+            self.lastCommitSummary = result.lastCommit
             self.updateLayout(projectName: result.projectName)
             self.refreshGithubStatus(cwd: cwd)
 
@@ -10745,6 +10776,15 @@ class GitPanelView: NSView {
         commitCard.isHidden = !isGitRepo
         githubCard.isHidden = !isGitRepo
         updateGithubCard()
+
+        if !isGitRepo { resetUndoConfirmState() }
+        if let summary = lastCommitSummary {
+            let truncated = summary.count > 35 ? String(summary.prefix(35)) + "…" : summary
+            undoCommitLabel.stringValue = truncated
+            undoCommitRow.isHidden = false
+        } else {
+            undoCommitRow.isHidden = true
+        }
     }
 
     // MARK: - Files Stack
@@ -10858,6 +10898,14 @@ class GitPanelView: NSView {
         }
     }
 
+    private func resetUndoConfirmState() {
+        undoConfirmTimer?.invalidate()
+        undoConfirmTimer = nil
+        undoConfirmPending = false
+        undoCommitBtn.title = "↩"
+        undoCommitBtn.contentTintColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
+    }
+
     private func refreshGithubStatus(cwd: String) {
         guard github.isAuthenticated, isGitRepo, hasRemote else {
             if isGitRepo && !hasRemote && github.isAuthenticated {
@@ -10919,6 +10967,33 @@ class GitPanelView: NSView {
     }
 
     // MARK: - Actions: Save (Stage All + Commit)
+
+    @objc private func undoCommitClicked() {
+        if !undoConfirmPending {
+            undoConfirmPending = true
+            undoCommitBtn.title = "Sicher?"
+            undoCommitBtn.contentTintColor = NSColor(calibratedRed: 1.0, green: 0.35, blue: 0.35, alpha: 1.0)
+            undoConfirmTimer?.invalidate()
+            undoConfirmTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: false) { [weak self] _ in
+                self?.resetUndoConfirmState()
+            }
+        } else {
+            resetUndoConfirmState()
+            let cwd = lastCwd
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self = self else { return }
+                let result = self.runGitAction(["reset", "--soft", "HEAD~1"], cwd: cwd)
+                DispatchQueue.main.async {
+                    if result.success {
+                        self.showFeedback("Commit zurückgesetzt", success: true)
+                        self.refresh()
+                    } else {
+                        self.showFeedback(result.output.isEmpty ? "Reset fehlgeschlagen" : result.output, success: false)
+                    }
+                }
+            }
+        }
+    }
 
     @objc private func saveClicked() {
         let msg = commitField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -11100,6 +11175,7 @@ class GitPanelView: NSView {
 
     deinit {
         stopWatchers()
+        undoConfirmTimer?.invalidate()
         refreshTimer?.invalidate()
         feedbackTimer?.invalidate()
         NotificationCenter.default.removeObserver(self, name: .appLanguageChanged, object: nil)
