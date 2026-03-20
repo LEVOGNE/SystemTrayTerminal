@@ -11,7 +11,7 @@ import WebKit
 
 // MARK: - Version
 
-let kAppVersion = "1.5.5"
+let kAppVersion = "1.5.6"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -5037,6 +5037,27 @@ class BorderlessWindow: NSWindow {
                 }
                 if flags2 == .command, event.charactersIgnoringModifiers == "o" {
                     d.openEditorFile(); return
+                }
+                // Standard editing shortcuts — route explicitly so they reach NSTextView
+                // even when the terminal event pipeline would otherwise consume them
+                let tv = (d.activeTab < d.tabEditorViews.count ? d.tabEditorViews[d.activeTab] : nil)?.textView
+                if let tv = tv {
+                    if flags2 == .command, event.charactersIgnoringModifiers == "x" {
+                        tv.cut(nil); return
+                    }
+                    if flags2 == .command, event.charactersIgnoringModifiers == "a" {
+                        tv.selectAll(nil); return
+                    }
+                    if flags2 == .command, event.charactersIgnoringModifiers == "z" {
+                        tv.undoManager?.undo(); return
+                    }
+                    if flags2 == [.command, .shift], event.charactersIgnoringModifiers == "z" {
+                        tv.undoManager?.redo(); return
+                    }
+                    if flags2 == .command, event.charactersIgnoringModifiers == "f" {
+                        (d.activeTab < d.tabEditorViews.count ? d.tabEditorViews[d.activeTab] : nil)?.showFindBar()
+                        return
+                    }
                 }
             }
             // Nano mode key intercepts (Ctrl+S/X/K/U)
@@ -16074,6 +16095,15 @@ class OnboardingPanel: NSPanel {
 // Minimal NSTextView subclass — only overrides cursor management so the
 // version-button overlay always shows an arrow cursor instead of iBeam.
 private class EditorTextView: NSTextView {
+    /// Called after paste; receives `true` if the document was empty before the paste.
+    var onPaste: ((_ wasEmpty: Bool) -> Void)?
+
+    override func paste(_ sender: Any?) {
+        let wasEmpty = string.isEmpty
+        super.paste(sender)
+        onPaste?(wasEmpty)
+    }
+
     override func mouseMoved(with event: NSEvent) {
         if window?.contentView?.subviews.contains(where: { $0 is UnsavedAlertView || $0 is PrintModal }) == true { return }
         if let vb = (NSApp.delegate as? AppDelegate)?.versionBtn,
@@ -16140,6 +16170,56 @@ enum SyntaxLanguage: String {
              "editorconfig", "gitconfig":               return .ini
         default:                                        return .none
         }
+    }
+
+    /// Heuristic language detection from pasted text content.
+    static func detectFromContent(_ text: String) -> SyntaxLanguage {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return .none }
+        let lower = t.lowercased()
+        // Shell scripts
+        if t.hasPrefix("#!/bin/") || t.hasPrefix("#!/usr/bin/env") { return .shell }
+        // HTML
+        if lower.hasPrefix("<!doctype html") || lower.hasPrefix("<html") { return .html }
+        // XML / plist
+        if t.hasPrefix("<?xml") || t.hasPrefix("<plist") { return .xml }
+        // JSON — starts with { or [ and has key:"value" pairs
+        if t.hasPrefix("{") || t.hasPrefix("[") {
+            if lower.contains("\":") || lower.contains("\": ") { return .json }
+        }
+        // SQL keywords
+        let sqlPrefixes = ["select ", "insert into", "create table", "drop table", "update ", "delete from"]
+        if sqlPrefixes.contains(where: { lower.hasPrefix($0) }) { return .sql }
+        // Python — def + import/print/self
+        if lower.contains("def ") &&
+           (lower.contains("import ") || lower.contains("print(") || lower.contains("self.")) { return .python }
+        if lower.hasPrefix("import ") && (lower.contains("\ndef ") || lower.contains("\nclass ")) { return .python }
+        // Swift — import Foundation/UIKit/SwiftUI, or func+var+let together
+        if lower.contains("import foundation") || lower.contains("import uikit") ||
+           lower.contains("import swiftui") || lower.contains("import appkit") { return .swift }
+        if lower.contains("func ") && lower.contains("var ") && lower.contains("let ") { return .swift }
+        // YAML — starts with --- or has multiple top-level key: value lines
+        if t.hasPrefix("---\n") { return .yaml }
+        let yamlTopLevelPairs = t.split(separator: "\n").prefix(10)
+            .filter { !$0.hasPrefix(" ") && !$0.hasPrefix("#") && !$0.hasPrefix("<") && $0.contains(": ") }.count
+        if yamlTopLevelPairs > 2 { return .yaml }
+        // TOML — [section] + key = value
+        if t.contains("\n[") && t.contains(" = ") { return .toml }
+        // INI — starts with [section]
+        if t.hasPrefix("[") && t.contains("]\n") && t.contains("=") { return .ini }
+        // CSS — has property: value pairs inside braces
+        if t.contains("{") && t.contains("}") &&
+           (lower.contains("color:") || lower.contains("margin:") ||
+            lower.contains("padding:") || lower.contains("font-")) { return .css }
+        // JavaScript — common indicators
+        if lower.contains("function ") || lower.contains("document.") ||
+           lower.contains("export default") || lower.contains("import {") ||
+           (lower.contains("const ") && lower.contains("=>")) { return .javascript }
+        // Markdown — first line is a heading, or contains multiple headings
+        let firstLine = t.components(separatedBy: "\n").first ?? ""
+        if firstLine.hasPrefix("# ") || firstLine.hasPrefix("## ") { return .markdown }
+        if t.contains("\n## ") || t.contains("\n# ") { return .markdown }
+        return .none
     }
 }
 
@@ -17207,6 +17287,130 @@ class LineGutterView: NSView {
 }
 
 // ---------------------------------------------------------------------------
+// MARK: - Find & Replace Bar
+
+private class FindReplaceBar: NSView {
+
+    var onSearch:     ((String, Bool) -> Void)?         // (query, forward)
+    var onReplace:    ((String) -> Void)?
+    var onReplaceAll: ((String, String) -> Void)?
+    var onClose:      (() -> Void)?
+
+    private(set) var findField:    NSTextField!
+    private(set) var replaceField: NSTextField!
+    private var matchLabel:        NSTextField!
+    private var prevBtn:           NSButton!
+    private var nextBtn:           NSButton!
+    private var replaceBtn:        NSButton!
+    private var replaceAllBtn:     NSButton!
+    private var closeBtn:          NSButton!
+
+    override var isFlipped: Bool { true }
+
+    override init(frame: NSRect) { super.init(frame: frame); setup() }
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func makeMiniBtn(_ title: String, _ sel: Selector) -> NSButton {
+        let b = NSButton(title: title, target: self, action: sel)
+        b.bezelStyle  = .rounded
+        b.controlSize = .small
+        b.font        = .systemFont(ofSize: 11)
+        return b
+    }
+    private func makeField(_ ph: String) -> NSTextField {
+        let f = NSTextField()
+        f.placeholderString = ph
+        f.font       = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        f.bezelStyle = .roundedBezel
+        f.controlSize = .small
+        return f
+    }
+
+    private func setup() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.95).cgColor
+        let sep = NSView()
+        sep.wantsLayer = true
+        sep.layer?.backgroundColor = NSColor.separatorColor.cgColor
+        sep.autoresizingMask = [.width, .maxYMargin]
+        addSubview(sep)
+        sep.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 1)
+
+        findField    = makeField("Find")
+        replaceField = makeField("Replace")
+        matchLabel   = NSTextField(labelWithString: "")
+        matchLabel.font       = .systemFont(ofSize: 11)
+        matchLabel.textColor  = .secondaryLabelColor
+        matchLabel.alignment  = .right
+
+        prevBtn       = makeMiniBtn("↑", #selector(prevTapped))
+        nextBtn       = makeMiniBtn("↓", #selector(nextTapped))
+        replaceBtn    = makeMiniBtn("Replace",  #selector(replaceTapped))
+        replaceAllBtn = makeMiniBtn("All",      #selector(replaceAllTapped))
+        closeBtn      = makeMiniBtn("✕",        #selector(closeTapped))
+        closeBtn.bezelStyle = .inline
+
+        for v: NSView in [findField, replaceField, matchLabel,
+                          prevBtn, nextBtn, replaceBtn, replaceAllBtn, closeBtn] {
+            addSubview(v)
+        }
+        findField.delegate    = self
+        replaceField.delegate = self
+        findField.target      = self
+        findField.action      = #selector(nextTapped)
+    }
+
+    override func layout() {
+        super.layout()
+        let w     = bounds.width
+        let rowH:  CGFloat = 24
+        let row1Y: CGFloat = 4
+        let row2Y: CGFloat = 33
+        let fieldW = max(100, w - 210)
+
+        findField.frame    = NSRect(x: 8, y: row1Y, width: fieldW, height: rowH)
+        replaceField.frame = NSRect(x: 8, y: row2Y, width: fieldW, height: rowH)
+
+        let btnX = findField.frame.maxX + 6
+        prevBtn.frame       = NSRect(x: btnX,       y: row1Y, width: 28, height: rowH)
+        nextBtn.frame       = NSRect(x: btnX + 30,  y: row1Y, width: 28, height: rowH)
+        matchLabel.frame    = NSRect(x: btnX + 60,  y: row1Y, width: 84, height: rowH)
+        closeBtn.frame      = NSRect(x: w - 28,     y: row1Y, width: 24, height: rowH)
+        replaceBtn.frame    = NSRect(x: btnX,        y: row2Y, width: 58, height: rowH)
+        replaceAllBtn.frame = NSRect(x: btnX + 62,   y: row2Y, width: 36, height: rowH)
+    }
+
+    func setMatchInfo(_ current: Int, _ total: Int) {
+        if total == 0 { matchLabel.stringValue = "No matches"; matchLabel.textColor = .systemRed }
+        else          { matchLabel.stringValue = "\(current)/\(total)"; matchLabel.textColor = .secondaryLabelColor }
+    }
+
+    @objc private func nextTapped()       { onSearch?(findField.stringValue, true)  }
+    @objc private func prevTapped()       { onSearch?(findField.stringValue, false) }
+    @objc private func replaceTapped()    { onReplace?(replaceField.stringValue)    }
+    @objc private func replaceAllTapped() { onReplaceAll?(findField.stringValue, replaceField.stringValue) }
+    @objc private func closeTapped()      { onClose?() }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.keyCode == 53 { onClose?(); return true }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
+extension FindReplaceBar: NSTextFieldDelegate {
+    func controlTextDidChange(_ obj: Notification) {
+        guard (obj.object as? NSTextField) === findField else { return }
+        onSearch?(findField.stringValue, true)
+    }
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy sel: Selector) -> Bool {
+        if sel == #selector(NSResponder.cancelOperation(_:)) { onClose?(); return true }
+        if sel == #selector(NSResponder.insertNewline(_:)),
+           (control as? NSTextField) === findField { onSearch?(findField.stringValue, true); return true }
+        return false
+    }
+}
+
+// ---------------------------------------------------------------------------
 
 class EditorView: NSView {
 
@@ -17228,6 +17432,10 @@ class EditorView: NSView {
     }
     var vimYankBuffer: String = ""
     var vimPendingColon: Bool = false
+
+    private var findBar: FindReplaceBar?
+    private var findMatches: [NSRange] = []
+    private var findMatchIndex: Int = 0
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -17275,6 +17483,14 @@ class EditorView: NSView {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.allowsUndo = true
         textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+
+        // Auto-detect syntax language when pasting into an empty document
+        (textView as? EditorTextView)?.onPaste = { [weak self] wasEmpty in
+            guard wasEmpty, let self = self,
+                  let storage = self.syntaxStorage, storage.language == .none else { return }
+            let detected = SyntaxLanguage.detectFromContent(storage.string)
+            if detected != .none { self.setLanguage(detected) }
+        }
 
         scrollView.documentView = textView
 
@@ -17565,22 +17781,128 @@ class EditorView: NSView {
     override func layout() {
         super.layout()
         guard let sv = scrollView, let tv = textView, let mb = modeBar else { return }
-        let modeBarH: CGFloat = mb.isHidden ? 0 : 26
-        let gutterW:  CGFloat = 44
-        let availH = max(0, bounds.height - modeBarH)
+        let modeBarH:  CGFloat = mb.isHidden ? 0 : 26
+        let findBarH:  CGFloat = findBar != nil ? 62 : 0
+        let gutterW:   CGFloat = 44
+        let availH = max(0, bounds.height - modeBarH - findBarH)
 
         // Gutter: left strip
-        lineGutter?.frame = NSRect(x: 0, y: modeBarH, width: gutterW, height: availH)
+        lineGutter?.frame = NSRect(x: 0, y: modeBarH + findBarH, width: gutterW, height: availH)
 
         // ScrollView: remainder to the right
-        sv.frame = NSRect(x: gutterW, y: modeBarH,
+        sv.frame = NSRect(x: gutterW, y: modeBarH + findBarH,
                           width: max(0, bounds.width - gutterW),
                           height: availH)
         mb.frame.size.width = bounds.width
+        findBar?.frame = NSRect(x: 0, y: modeBarH, width: bounds.width, height: findBarH)
         let w = sv.contentSize.width
         tv.frame = NSRect(x: 0, y: 0, width: w,
                           height: max(tv.frame.height, sv.contentSize.height))
         tv.textContainer?.containerSize = NSSize(width: w, height: CGFloat.greatestFiniteMagnitude)
+    }
+
+    func showFindBar() {
+        if let bar = findBar {
+            window?.makeFirstResponder(bar.findField)
+            return
+        }
+        let bar = FindReplaceBar(frame: .zero)
+        bar.onSearch = { [weak self] query, forward in
+            self?.performFind(query: query, forward: forward)
+        }
+        bar.onReplace = { [weak self] replacement in
+            self?.replaceCurrentMatch(with: replacement)
+        }
+        bar.onReplaceAll = { [weak self] query, replacement in
+            self?.replaceAllMatches(query: query, with: replacement)
+        }
+        bar.onClose = { [weak self] in self?.hideFindBar() }
+        addSubview(bar)
+        findBar = bar
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        window?.makeFirstResponder(bar.findField)
+    }
+
+    func hideFindBar() {
+        guard let bar = findBar else { return }
+        clearFindHighlights()
+        bar.removeFromSuperview()
+        findBar = nil
+        findMatches = []
+        findMatchIndex = 0
+        needsLayout = true
+        window?.makeFirstResponder(textView)
+    }
+
+    private func performFind(query: String, forward: Bool) {
+        clearFindHighlights()
+        guard !query.isEmpty,
+              let lm = textView.layoutManager,
+              let ts = textView.textStorage else { return }
+        let text = ts.string
+        var matches: [NSRange] = []
+        var searchRange = text.startIndex..<text.endIndex
+        let opts: String.CompareOptions = [.caseInsensitive]
+        while let r = text.range(of: query, options: opts, range: searchRange) {
+            matches.append(NSRange(r, in: text))
+            guard r.upperBound < text.endIndex else { break }
+            searchRange = r.upperBound..<text.endIndex
+        }
+        findMatches = matches
+        guard !matches.isEmpty else { findBar?.setMatchInfo(0, 0); return }
+
+        // Advance/retreat index, wrapping around
+        if matches.count == 1 {
+            findMatchIndex = 0
+        } else if forward {
+            findMatchIndex = (findMatchIndex + 1) % matches.count
+        } else {
+            findMatchIndex = (findMatchIndex - 1 + matches.count) % matches.count
+        }
+
+        let allColor = NSColor.systemYellow.withAlphaComponent(0.35)
+        for r in matches { lm.addTemporaryAttributes([.backgroundColor: allColor], forCharacterRange: r) }
+        let curColor = NSColor.systemOrange.withAlphaComponent(0.70)
+        lm.addTemporaryAttributes([.backgroundColor: curColor], forCharacterRange: matches[findMatchIndex])
+        textView.scrollRangeToVisible(matches[findMatchIndex])
+        textView.setSelectedRange(matches[findMatchIndex])
+        findBar?.setMatchInfo(findMatchIndex + 1, matches.count)
+    }
+
+    private func clearFindHighlights() {
+        guard let lm = textView.layoutManager, let ts = textView.textStorage else { return }
+        lm.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: ts.length))
+    }
+
+    private func replaceCurrentMatch(with replacement: String) {
+        guard !findMatches.isEmpty else { return }
+        textView.insertText(replacement, replacementRange: findMatches[findMatchIndex])
+        let query = findBar?.findField.stringValue ?? ""
+        findMatchIndex = max(0, findMatchIndex - 1)
+        performFind(query: query, forward: true)
+    }
+
+    private func replaceAllMatches(query: String, with replacement: String) {
+        guard !query.isEmpty, let ts = textView.textStorage else { return }
+        let text = ts.string
+        var searchRange = text.startIndex..<text.endIndex
+        var replacements: [(NSRange, String)] = []
+        let opts: String.CompareOptions = [.caseInsensitive]
+        while let r = text.range(of: query, options: opts, range: searchRange) {
+            replacements.append((NSRange(r, in: text), replacement))
+            guard r.upperBound < text.endIndex else { break }
+            searchRange = r.upperBound..<text.endIndex
+        }
+        guard !replacements.isEmpty else { return }
+        // Apply from end to start so earlier ranges stay valid
+        for (nsRange, repl) in replacements.reversed() {
+            ts.replaceCharacters(in: nsRange, with: repl)
+        }
+        clearFindHighlights()
+        findMatches = []
+        findMatchIndex = 0
+        findBar?.setMatchInfo(0, replacements.count)
     }
 }
 

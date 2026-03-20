@@ -4,6 +4,16 @@ All notable changes to SystemTrayTerminal are documented here.
 
 ---
 
+## v1.5.6 — 2026-03-20
+
+### New Features
+
+- **Editor: Cmd+X Cut** — Explicit routing ensures Cut, Select All, Undo, and Redo (Cmd+X / Cmd+A / Cmd+Z / Cmd+Shift+Z) always work in editor tabs regardless of the event pipeline.
+- **Editor: Find & Replace** (Cmd+F) — VS Code-style inline panel at the bottom of the editor. Real-time match highlighting (yellow for all, orange for current), Next/Previous navigation (↑/↓ buttons or Enter), Replace (replaces current match and advances), Replace All (applied end-to-start so ranges stay valid). Esc closes and clears all highlights.
+- **Editor: Auto Language Detection on Paste** — Pasting code into an empty document automatically detects the syntax and enables highlighting. Recognises HTML, Python, Swift, JSON, CSS, JavaScript, SQL, YAML, TOML, INI, Dockerfile, Shell scripts, XML, and Markdown via heuristic content analysis.
+
+---
+
 ## v1.5.5 — 2026-03-20
 
 ### Bug Fixes

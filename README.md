@@ -26,7 +26,7 @@
 
 <br>
 
-[**Download SystemTrayTerminal.app (v1.5.5)**](https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest) · [**Website**](https://levogne.github.io/SystemTrayTerminal/)
+[**Download SystemTrayTerminal.app (v1.5.6)**](https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest) · [**Website**](https://levogne.github.io/SystemTrayTerminal/)
 
 ---
 
