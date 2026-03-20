@@ -4,6 +4,14 @@ All notable changes to SystemTrayTerminal are documented here.
 
 ---
 
+## v1.5.7 — 2026-03-20
+
+### Bug Fixes
+
+- **Critical: Updater crash on startup** — `silentUpdateCheck()`, `manualCheckForUpdate()`, and `startUpdateDownload()` now run their UI callbacks on `@MainActor`. Previously, the `Task { }` closures called `showUpdateToast` / `showGenericToast` off the main thread, causing a guaranteed SIGABRT in `NSView.addSubview` (NSISEngine). This is why every update attempt ended with the app starting and immediately crashing — the newly installed version would crash on first launch before the user could see it.
+
+---
+
 ## v1.5.6 — 2026-03-20
 
 ### New Features

@@ -11,7 +11,7 @@ import WebKit
 
 // MARK: - Version
 
-let kAppVersion = "1.5.6"
+let kAppVersion = "1.5.7"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -21172,7 +21172,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func silentUpdateCheck() {
         guard UserDefaults.standard.bool(forKey: "autoCheckUpdates") else { return }
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self = self else { return }
             if let release = try? await self.updateChecker.checkForUpdate() {
                 self.pendingRelease = release
@@ -21192,7 +21192,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         showGenericToast(badge: "UPDATE", text: Loc.checking,
                          badgeColor: NSColor(calibratedWhite: 0.35, alpha: 1.0), dismissAfter: 3.0)
 
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {
                 if let release = try await self.updateChecker.checkForUpdate() {
@@ -21216,7 +21216,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         showDownloadProgressToast(percent: 0)
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self = self else { return }
             do {
                 try await self.updateChecker.downloadAndInstall(release: release) { @MainActor [weak self] pct in
