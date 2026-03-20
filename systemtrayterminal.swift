@@ -11,7 +11,7 @@ import WebKit
 
 // MARK: - Version
 
-let kAppVersion = "1.5.3"
+let kAppVersion = "1.5.4"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -203,6 +203,9 @@ enum Loc {
     static func aheadOnly(_ a: Int) -> String { String(format: t("aheadOnly"), a, a == 1 ? "" : "s") }
     static func behindOnly(_ b: Int) -> String { String(format: t("behindOnly"), b, b == 1 ? "" : "s") }
     static var upToDate: String     { t("upToDate") }
+    static func smartPullConflict(_ files: String) -> String { String(format: t("smartPullConflict"), files) }
+    static var smartPullStashFailed: String { t("smartPullStashFailed") }
+    static var smartPullStashError: String { t("smartPullStashError") }
     // MARK: Toasts / Alerts
     static var noUpdateAvailable: String { t("noUpdateAvailable") }
     static var updateAvailable: String { t("updateAvailable") }
@@ -297,6 +300,9 @@ enum Loc {
             "aheadBehind": "↑ %d to push, ↓ %d to pull",
             "aheadOnly": "↑ %d change%@ to push", "behindOnly": "↓ %d new change%@ available",
             "upToDate": "✓  All up to date",
+            "smartPullConflict": "⚠  Conflict in: %@\nPlease resolve manually in Terminal.",
+            "smartPullStashFailed": "⚠  Pull ok, but auto-stash could not be restored. Check `git stash list`.",
+            "smartPullStashError": "⚠  Could not stash local changes. Resolve manually or commit your changes first.",
             "noUpdateAvailable": "No update available",
             "updateAvailable": "%@ available — click to install",
             "onlyWithAppBundle": "Only works with .app bundle",
@@ -366,6 +372,9 @@ enum Loc {
             "aheadBehind": "↑ %d zu senden, ↓ %d zu holen",
             "aheadOnly": "↑ %d Änderung%@ zu pushen", "behindOnly": "↓ %d neue Änderung%@ verfügbar",
             "upToDate": "✓  Alles auf dem aktuellen Stand",
+            "smartPullConflict": "⚠  Konflikt in: %@\nBitte manuell im Terminal lösen.",
+            "smartPullStashFailed": "⚠  Pull ok, aber Auto-Stash konnte nicht zurückgespielt werden. Prüfe `git stash list`.",
+            "smartPullStashError": "⚠  Lokale Änderungen konnten nicht gestasht werden. Commit oder stash manuell.",
             "noUpdateAvailable": "Kein Update verfügbar",
             "updateAvailable": "%@ verfügbar — zum Installieren klicken",
             "onlyWithAppBundle": "Nur mit .app Bundle möglich",
@@ -435,6 +444,9 @@ enum Loc {
             "aheadBehind": "↑ %d gönderilecek, ↓ %d alınacak",
             "aheadOnly": "↑ %d değişiklik%@ gönderilecek", "behindOnly": "↓ %d yeni değişiklik%@ mevcut",
             "upToDate": "✓  Her şey güncel",
+            "smartPullConflict": "⚠  Çakışma: %@\nLütfen terminalde manuel olarak çöz.",
+            "smartPullStashFailed": "⚠  Pull tamam, ancak otomatik stash geri yüklenemedi. `git stash list` kontrol et.",
+            "smartPullStashError": "⚠  Yerel değişiklikler stashlanamadı. Manuel olarak commit et veya stashla.",
             "noUpdateAvailable": "Güncelleme yok",
             "updateAvailable": "%@ mevcut — yüklemek için tıkla",
             "onlyWithAppBundle": "Yalnızca .app paketi ile çalışır",
@@ -504,6 +516,9 @@ enum Loc {
             "aheadBehind": "↑ %d por enviar, ↓ %d por recibir",
             "aheadOnly": "↑ %d cambio%@ por enviar", "behindOnly": "↓ %d cambio%@ nuevo disponible",
             "upToDate": "✓  Todo al día",
+            "smartPullConflict": "⚠  Conflicto en: %@\nPor favor, resuélvelo manualmente en Terminal.",
+            "smartPullStashFailed": "⚠  Pull ok, pero no se pudo restaurar el auto-stash. Comprueba `git stash list`.",
+            "smartPullStashError": "⚠  No se pudieron guardar los cambios locales. Haz commit o stash manualmente.",
             "noUpdateAvailable": "No hay actualización disponible",
             "updateAvailable": "%@ disponible — haz clic para instalar",
             "onlyWithAppBundle": "Solo funciona con paquete .app",
@@ -573,6 +588,9 @@ enum Loc {
             "aheadBehind": "↑ %d à envoyer, ↓ %d à récupérer",
             "aheadOnly": "↑ %d changement%@ à envoyer", "behindOnly": "↓ %d nouveau changement%@ disponible",
             "upToDate": "✓  Tout à jour",
+            "smartPullConflict": "⚠  Conflit dans : %@\nVeuillez résoudre manuellement dans le Terminal.",
+            "smartPullStashFailed": "⚠  Pull ok, mais l'auto-stash n'a pas pu être restauré. Vérifiez `git stash list`.",
+            "smartPullStashError": "⚠  Impossible de sauvegarder les modifications locales. Faites un commit ou un stash manuellement.",
             "noUpdateAvailable": "Pas de mise à jour disponible",
             "updateAvailable": "%@ disponible — cliquez pour installer",
             "onlyWithAppBundle": "Fonctionne uniquement avec le bundle .app",
@@ -642,6 +660,9 @@ enum Loc {
             "aheadBehind": "↑ %d da inviare, ↓ %d da ricevere",
             "aheadOnly": "↑ %d modifica%@ da inviare", "behindOnly": "↓ %d nuova modifica%@ disponibile",
             "upToDate": "✓  Tutto aggiornato",
+            "smartPullConflict": "⚠  Conflitto in: %@\nRisolvi manualmente nel Terminale.",
+            "smartPullStashFailed": "⚠  Pull ok, ma l'auto-stash non è stato ripristinato. Controlla `git stash list`.",
+            "smartPullStashError": "⚠  Impossibile fare lo stash delle modifiche locali. Esegui un commit o uno stash manualmente.",
             "noUpdateAvailable": "Nessun aggiornamento disponibile",
             "updateAvailable": "%@ disponibile — clicca per installare",
             "onlyWithAppBundle": "Funziona solo con bundle .app",
@@ -711,6 +732,9 @@ enum Loc {
             "aheadBehind": "↑ %d للإرسال، ↓ %d للاستلام",
             "aheadOnly": "↑ %d تغيير%@ للإرسال", "behindOnly": "↓ %d تغيير%@ جديد متاح",
             "upToDate": "✓  كل شيء محدث",
+            "smartPullConflict": "⚠  تعارض في: %@\nيرجى الحل يدوياً في الطرفية.",
+            "smartPullStashFailed": "⚠  Pull ناجح، لكن تعذّر استعادة الـ stash التلقائي. تحقق من `git stash list`.",
+            "smartPullStashError": "⚠  تعذّر حفظ التغييرات المحلية. قم بـ commit أو stash يدوياً.",
             "noUpdateAvailable": "لا يوجد تحديث",
             "updateAvailable": "%@ متاح — انقر للتثبيت",
             "onlyWithAppBundle": "يعمل فقط مع حزمة .app",
@@ -780,6 +804,9 @@ enum Loc {
             "aheadBehind": "↑ %d件を送信、↓ %d件を受信",
             "aheadOnly": "↑ %d件%@の変更を送信", "behindOnly": "↓ %d件%@の新しい変更あり",
             "upToDate": "✓  すべて最新",
+            "smartPullConflict": "⚠  コンフリクト: %@\nターミナルで手動解決してください。",
+            "smartPullStashFailed": "⚠  Pull成功、ただし自動stashを復元できませんでした。`git stash list` を確認。",
+            "smartPullStashError": "⚠  ローカルの変更をstashできませんでした。手動でcommitまたはstashしてください。",
             "noUpdateAvailable": "更新はありません",
             "updateAvailable": "%@ 利用可能 — クリックしてインストール",
             "onlyWithAppBundle": ".appバンドルでのみ機能します",
@@ -849,6 +876,9 @@ enum Loc {
             "aheadBehind": "↑ %d 待推送，↓ %d 待拉取",
             "aheadOnly": "↑ %d 个%@更改待推送", "behindOnly": "↓ %d 个%@新更改可用",
             "upToDate": "✓  一切都是最新的",
+            "smartPullConflict": "⚠  冲突文件: %@\n请在终端手动解决。",
+            "smartPullStashFailed": "⚠  Pull 成功，但自动 stash 无法恢复。请检查 `git stash list`。",
+            "smartPullStashError": "⚠  无法暂存本地更改。请手动 commit 或 stash。",
             "noUpdateAvailable": "没有可用更新",
             "updateAvailable": "%@ 可用 — 点击安装",
             "onlyWithAppBundle": "仅适用于 .app 包",
@@ -918,6 +948,9 @@ enum Loc {
             "aheadBehind": "↑ %d отправить, ↓ %d получить",
             "aheadOnly": "↑ %d изменение%@ отправить", "behindOnly": "↓ %d новое изменение%@ доступно",
             "upToDate": "✓  Всё актуально",
+            "smartPullConflict": "⚠  Конфликт в: %@\nПожалуйста, разрешите вручную в Терминале.",
+            "smartPullStashFailed": "⚠  Pull выполнен, но auto-stash не восстановлен. Проверь `git stash list`.",
+            "smartPullStashError": "⚠  Не удалось сохранить локальные изменения в stash. Сделай commit или stash вручную.",
             "noUpdateAvailable": "Обновлений нет",
             "updateAvailable": "%@ доступно — нажмите для установки",
             "onlyWithAppBundle": "Работает только с .app",
@@ -10682,6 +10715,49 @@ class GitPanelView: NSView {
         } catch { return (false, error.localizedDescription) }
     }
 
+    // Returns files with unresolved merge conflicts (git diff-filter U = Unmerged)
+    private func conflictedFiles(cwd: String) -> [String] {
+        guard let out = runGit(["diff", "--name-only", "--diff-filter=U"], cwd: cwd), !out.isEmpty else { return [] }
+        return out.split(separator: "\n").map(String.init)
+    }
+
+    // Smart pull: fetch → optional stash → pull(patience) → pop stash
+    // Returns (success, userFacingMessage)
+    private func smartPull(cwd: String) -> (success: Bool, message: String) {
+        // 1. Fetch to update remote refs so @{upstream} is current
+        _ = runGitAction(["fetch", "--quiet"], cwd: cwd)
+
+        // 2. Stash dirty working tree if needed
+        let porcelain = runGit(["status", "--porcelain"], cwd: cwd) ?? ""
+        let isDirty = !porcelain.isEmpty
+        var stashed = false
+        if isDirty {
+            let s = runGitAction(["stash", "push", "-m", "STT auto-stash before pull"], cwd: cwd)
+            if !s.success { return (false, Loc.smartPullStashError) }
+            stashed = true
+        }
+
+        // 3. Pull with patience diff strategy for best auto-merge quality
+        let pull = runGitAction(["pull", "-X", "patience"], cwd: cwd)
+
+        if !pull.success {
+            // Query conflicted files BEFORE merge --abort clears the unmerged index state
+            let files = conflictedFiles(cwd: cwd)
+            _ = runGitAction(["merge", "--abort"], cwd: cwd)
+            if stashed { _ = runGitAction(["stash", "pop"], cwd: cwd) }
+            let fileList = files.isEmpty ? pull.output : files.joined(separator: ", ")
+            return (false, Loc.smartPullConflict(fileList))
+        }
+
+        // 4. Restore stash
+        if stashed {
+            let pop = runGitAction(["stash", "pop"], cwd: cwd)
+            if !pop.success { return (true, Loc.smartPullStashFailed) }
+        }
+
+        return (true, Loc.updated)
+    }
+
     // MARK: - Refresh
 
     private func refresh() {
@@ -10708,6 +10784,7 @@ class GitPanelView: NSView {
                     let hasRemote = remoteURL != nil
 
                     var aheadCount = 0, behindCount = 0
+                    if hasRemote { _ = self.runGit(["fetch", "--quiet"], cwd: cwd) }
                     if hasRemote, let ab = self.runGit(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"], cwd: cwd) {
                         let parts = ab.split(separator: "\t")
                         if parts.count == 2 { aheadCount = Int(parts[0]) ?? 0; behindCount = Int(parts[1]) ?? 0 }
@@ -11116,10 +11193,10 @@ class GitPanelView: NSView {
         let cwd = lastCwd
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            let result = self.runGitAction(["pull"], cwd: cwd)
+            let result = self.smartPull(cwd: cwd)
             DispatchQueue.main.async {
                 self.updateBtn.isEnabled = true
-                self.showFeedback(result.success ? Loc.updated : "Error: \(result.output)", success: result.success)
+                self.showFeedback(result.message, success: result.success)
                 self.github.cache.lastFetch = .distantPast
                 self.refresh()
             }

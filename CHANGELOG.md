@@ -4,6 +4,24 @@ All notable changes to SystemTrayTerminal are documented here.
 
 ---
 
+## v1.5.4 — 2026-03-20
+
+### Bug Fixes
+
+- **Git Panel: Stale ahead/behind count** — The panel now runs `git fetch --quiet` before computing the ahead/behind delta. Previously, remote commits pushed by collaborators were invisible until the user manually ran `git fetch` in the terminal.
+
+### Improvements
+
+- **Git Panel: Smart Pull** — The "Update" button now uses a safe pull sequence instead of a bare `git pull`:
+  1. Fetches remote refs first
+  2. Auto-stashes uncommitted local changes before pulling
+  3. Pulls using the patience diff strategy for best auto-merge quality on non-overlapping edits
+  4. On merge conflict: aborts cleanly, restores the stash, and shows which files conflicted
+  5. On success: pops the stash so local changes are preserved
+- **Git Panel: Localized error messages** — All smart-pull error states (`smartPullConflict`, `smartPullStashFailed`, `smartPullStashError`) are fully localized across all 10 supported languages.
+
+---
+
 ## v1.5.3 — 2026-03-19
 
 ### New Features
