@@ -4,10 +4,11 @@ All notable changes to SystemTrayTerminal are documented here.
 
 ---
 
-## v1.5.4 — 2026-03-20
+## v1.5.5 — 2026-03-20
 
 ### Bug Fixes
 
+- **Auto-Updater: App quit without relaunch** — Fixed a critical bug where the app would exit after installing an update but the new version never appeared. Root cause: `open App.app` finds the running instance (same Bundle-ID) and sends it a reopen event instead of launching the new binary. Fixed by using `open -n` to force a new instance.
 - **Git Panel: Stale ahead/behind count** — The panel now runs `git fetch --quiet` before computing the ahead/behind delta. Previously, remote commits pushed by collaborators were invisible until the user manually ran `git fetch` in the terminal.
 
 ### Improvements

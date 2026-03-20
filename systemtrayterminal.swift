@@ -11,7 +11,7 @@ import WebKit
 
 // MARK: - Version
 
-let kAppVersion = "1.5.4"
+let kAppVersion = "1.5.5"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -15893,11 +15893,14 @@ class UpdateChecker {
         // 9. Schedule relaunch after 3s — caller shows SUCCESS toast in the meantime
         Task { @MainActor [fm, currentAppPath, backupPath] in
             try? await Task.sleep(for: .seconds(3))
-            // [P2] For .app bundles: use `open` directly and verify exit code before deleting backup.
+            // [P2] For .app bundles: use `open -n` to force a new instance.
+            // Without -n, macOS finds the running old instance (same bundle ID) and sends
+            // it a ReopenApplication event instead of launching the new binary — so the old
+            // app exits and nothing replaces it.
             if currentAppPath.hasSuffix(".app") {
                 let openProc = Process()
                 openProc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-                openProc.arguments = [currentAppPath]
+                openProc.arguments = ["-n", currentAppPath]
                 do {
                     try openProc.run()
                     openProc.waitUntilExit()  // open exits quickly (≈ launch queued)

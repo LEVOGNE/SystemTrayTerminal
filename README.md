@@ -26,7 +26,7 @@
 
 <br>
 
-[**Download SystemTrayTerminal.app (v1.5.4)**](https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest) · [**Website**](https://levogne.github.io/SystemTrayTerminal/)
+[**Download SystemTrayTerminal.app (v1.5.5)**](https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest) · [**Website**](https://levogne.github.io/SystemTrayTerminal/)
 
 ---
 
@@ -813,7 +813,7 @@ This project follows [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
 <img src="icon.png" width="64" alt="SystemTrayTerminal">
 
-### SystemTrayTerminal v1.5.4
+### SystemTrayTerminal v1.5.5
 
 *21,700+ lines. One file. Zero dependencies. Text Editor with Live Preview. SSH Manager. Git panel. WebPicker. Color Themes. SHA256-verified auto-updater.*
 
