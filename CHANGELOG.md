@@ -4,6 +4,16 @@ All notable changes to SystemTrayTerminal are documented here.
 
 ---
 
+## v1.5.8 — 2026-03-21
+
+### New Features
+
+- **Editor: Matching Bracket Highlight** — Cursor auf `{` `}` `(` `)` `[` `]` → Gegenstück wird sofort hervorgehoben. Automatisch, kein Shortcut nötig.
+- **Editor: Auto-Indent beim Enter** — Neue Zeile übernimmt Einrückung der aktuellen Zeile. Smart Indent wenn Zeile mit `{`, `(`, `[` endet. Bracket-Split für `}` direkt nach Cursor.
+- **Editor: Code Formatter (⇧⌥F)** — JSON intern formatiert, HTML/CSS/JS via prettier, Python via black, Swift via swift-format. Toast-Hinweis wenn Tool nicht installiert. Vollständig Undo-fähig. Auch über `{ }` Button im Footer.
+
+---
+
 ## v1.5.7 — 2026-03-20
 
 ### Bug Fixes
