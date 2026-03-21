@@ -1539,6 +1539,51 @@ func testBracketMatching() {
 testBracketMatching()
 
 // ============================================================================
+// MARK: - Auto Indent
+// ============================================================================
+
+/// Berechnet die neue Einrückung für die Zeile nach Enter.
+/// - text: gesamter Dokumentinhalt
+/// - cursorPos: Position des Cursors (nach der letzten getippten Zeile)
+/// - useTab: true → Tab, false → 2 Spaces
+/// Gibt die Einrückung als String zurück (Whitespace der neuen Zeile).
+func autoIndent_Test(_ text: String, cursorPos: Int, useTab: Bool) -> String {
+    let indentUnit = useTab ? "\t" : "  "
+    let nsText = text as NSString
+    let lineRange = nsText.lineRange(for: NSRange(location: cursorPos, length: 0))
+    let line = nsText.substring(with: lineRange)
+    // Leading whitespace
+    var baseIndent = ""
+    for ch in line { if ch == " " || ch == "\t" { baseIndent.append(ch) } else { break } }
+    // Smart indent: endet Zeile (ohne Newline) mit öffnender Klammer?
+    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let last = trimmed.last, "{([".contains(last) {
+        return baseIndent + indentUnit
+    }
+    return baseIndent
+}
+
+func testAutoIndent() {
+    // Basis: leere Zeile → keine Einrückung
+    assert(autoIndent_Test("hello\n", cursorPos: 5, useTab: false) == "", "no indent")
+    // Basis: eingerückte Zeile → gleiche Einrückung
+    assert(autoIndent_Test("  hello\n", cursorPos: 7, useTab: false) == "  ", "2-space indent")
+    assert(autoIndent_Test("    hello\n", cursorPos: 9, useTab: false) == "    ", "4-space indent")
+    // Smart: Zeile endet mit {
+    assert(autoIndent_Test("function() {\n", cursorPos: 12, useTab: false) == "  ", "smart { indent")
+    // Smart: eingerückte Zeile mit {
+    assert(autoIndent_Test("  if (x) {\n", cursorPos: 10, useTab: false) == "    ", "nested { indent")
+    // Smart: Zeile endet mit (
+    assert(autoIndent_Test("func foo(\n", cursorPos: 8, useTab: false) == "  ", "smart ( indent")
+    // Tabs
+    assert(autoIndent_Test("function() {\n", cursorPos: 12, useTab: true) == "\t", "tab indent")
+    testsPassed += 1
+    print("✓ Auto-indent logic — 7 cases")
+}
+
+testAutoIndent()
+
+// ============================================================================
 // MARK: - Results
 // ============================================================================
 

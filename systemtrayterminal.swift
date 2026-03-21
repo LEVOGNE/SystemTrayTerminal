@@ -16184,7 +16184,7 @@ private class EditorTextView: NSTextView {
 
     private var bracketHighlightRanges: [NSRange] = []
 
-    @MainActor func updateBracketHighlight() {
+    func updateBracketHighlight() {
         guard let lm = layoutManager, let ts = textStorage else { return }
         // Clear previous highlights
         for r in bracketHighlightRanges {
@@ -16204,6 +16204,40 @@ private class EditorTextView: NSTextView {
                 lm.addTemporaryAttributes([.backgroundColor: color], forCharacterRange: r2)
                 bracketHighlightRanges = [r1, r2]
                 return  // nur einmal highlighten
+            }
+        }
+    }
+
+    override func insertNewline(_ sender: Any?) {
+        let nsText = string as NSString
+        let sel = selectedRange()
+        // Leading whitespace der aktuellen Zeile bestimmen
+        let lineRange = nsText.lineRange(for: NSRange(location: sel.location, length: 0))
+        let line = nsText.substring(with: lineRange)
+        var baseIndent = ""
+        for ch in line { if ch == " " || ch == "\t" { baseIndent.append(ch) } else { break } }
+        // Einrückeinheit aus Settings
+        let useTab = UserDefaults.standard.bool(forKey: "editorUseTabs")
+        let indentUnit = useTab ? "\t" : "  "
+        // Smart indent: endet Zeile mit öffnender Klammer?
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        let smartIndent = (trimmed.last.map { "{([".contains($0) } ?? false)
+        // Bracket-Split: steht unmittelbar nach Cursor eine schließende Klammer?
+        let nextUnichar: unichar? = sel.location < nsText.length ? nsText.character(at: sel.location) : nil
+        let isSplit = nextUnichar.map { "})]".utf16.contains($0) } ?? false
+        let newIndent = baseIndent + (smartIndent ? indentUnit : "")
+        if isSplit && smartIndent {
+            // Cursor zwischen { und } → beide auf eigene Zeilen aufteilen
+            super.insertNewline(sender)
+            insertText(newIndent, replacementRange: selectedRange())
+            let savedSel = selectedRange()
+            super.insertNewline(sender)
+            insertText(baseIndent, replacementRange: selectedRange())
+            setSelectedRange(savedSel)
+        } else {
+            super.insertNewline(sender)
+            if !newIndent.isEmpty {
+                insertText(newIndent, replacementRange: selectedRange())
             }
         }
     }
