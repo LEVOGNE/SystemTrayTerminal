@@ -1471,6 +1471,74 @@ test("PickEntryRecord encodes and decodes round-trip") {
 }
 
 // ============================================================================
+// MARK: - Bracket Matching
+// ============================================================================
+
+func findMatchingBracket_Test(in text: String, at pos: Int) -> Int? {
+    let chars = Array(text)
+    guard pos >= 0 && pos < chars.count else { return nil }
+    let ch = chars[pos]
+    let (open, close, forward): (Character, Character, Bool)
+    switch ch {
+    case "{": (open, close, forward) = ("{", "}", true)
+    case "}": (open, close, forward) = ("{", "}", false)
+    case "(": (open, close, forward) = ("(", ")", true)
+    case ")": (open, close, forward) = ("(", ")", false)
+    case "[": (open, close, forward) = ("[", "]", true)
+    case "]": (open, close, forward) = ("[", "]", false)
+    default: return nil
+    }
+    var depth = 1
+    let limit = 10_000
+    if forward {
+        var i = pos + 1
+        while i < chars.count && i - pos <= limit {
+            if chars[i] == open  { depth += 1 }
+            if chars[i] == close { depth -= 1; if depth == 0 { return i } }
+            i += 1
+        }
+    } else {
+        var i = pos - 1
+        while i >= 0 && pos - i <= limit {
+            if chars[i] == close { depth += 1 }
+            if chars[i] == open  { depth -= 1; if depth == 0 { return i } }
+            i -= 1
+        }
+    }
+    return nil
+}
+
+func testBracketMatching() {
+    // Einfach
+    assert(findMatchingBracket_Test(in: "{}", at: 0) == 1,     "{ → }")
+    assert(findMatchingBracket_Test(in: "{}", at: 1) == 0,     "} → {")
+    assert(findMatchingBracket_Test(in: "(())", at: 0) == 3,   "outer (")
+    assert(findMatchingBracket_Test(in: "(())", at: 1) == 2,   "inner (")
+    // Nested
+    assert(findMatchingBracket_Test(in: "{{}}", at: 0) == 3,   "outer {")
+    assert(findMatchingBracket_Test(in: "{{}}", at: 1) == 2,   "inner {")
+    assert(findMatchingBracket_Test(in: "{{}}", at: 2) == 1,   "inner }")
+    assert(findMatchingBracket_Test(in: "{{}}", at: 3) == 0,   "outer }")
+    // Kein Match
+    assert(findMatchingBracket_Test(in: "{",  at: 0) == nil,   "unmatched {")
+    assert(findMatchingBracket_Test(in: ")",  at: 0) == nil,   "unmatched )")
+    // Kein Bracket
+    assert(findMatchingBracket_Test(in: "abc", at: 0) == nil,  "no bracket")
+    // Eckige Klammern
+    assert(findMatchingBracket_Test(in: "[1,2]", at: 0) == 4,  "[ → ]")
+    // Edge: leerer String und out-of-bounds
+    assert(findMatchingBracket_Test(in: "", at: 0) == nil,     "empty string")
+    assert(findMatchingBracket_Test(in: "{}", at: -1) == nil,  "negative pos")
+    // 10k-Limit: unmatched bracket weit entfernt → nil
+    let longStr = "{" + String(repeating: "x", count: 10_001)
+    assert(findMatchingBracket_Test(in: longStr, at: 0) == nil, "10k limit")
+    testsPassed += 1
+    print("✓ Bracket matching — 15 cases")
+}
+
+testBracketMatching()
+
+// ============================================================================
 // MARK: - Results
 // ============================================================================
 

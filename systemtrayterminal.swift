@@ -16139,6 +16139,74 @@ private class EditorTextView: NSTextView {
         }
         return super.performDragOperation(sender)
     }
+
+    // MARK: Bracket Highlight
+
+    private static let bracketOpen:  [unichar] = [unichar(UInt8(ascii: "{")), unichar(UInt8(ascii: "(")), unichar(UInt8(ascii: "["))]
+    private static let bracketClose: [unichar] = [unichar(UInt8(ascii: "}")), unichar(UInt8(ascii: ")")), unichar(UInt8(ascii: "]"))]
+
+    /// Finds the matching bracket position in `text` starting at `pos`.
+    /// Returns nil if no bracket at pos or no match found within 10k characters.
+    static func findMatchingBracket(in text: NSString, at pos: Int) -> Int? {
+        guard pos >= 0 && pos < text.length else { return nil }
+        let ch = text.character(at: pos)
+        let openChars  = bracketOpen
+        let closeChars = bracketClose
+        var open: unichar = 0
+        var close: unichar = 0
+        let forward: Bool
+        if let idx = openChars.firstIndex(of: ch) {
+            forward = true;  open = openChars[idx];  close = closeChars[idx]
+        } else if let idx = closeChars.firstIndex(of: ch) {
+            forward = false; close = closeChars[idx]; open = openChars[idx]
+        } else { return nil }
+        var depth = 1
+        let limit = 10_000
+        if forward {
+            var i = pos + 1
+            while i < text.length && i - pos <= limit {
+                let c = text.character(at: i)
+                if c == open  { depth += 1 }
+                if c == close { depth -= 1; if depth == 0 { return i } }
+                i += 1
+            }
+        } else {
+            var i = pos - 1
+            while i >= 0 && pos - i <= limit {
+                let c = text.character(at: i)
+                if c == close { depth += 1 }
+                if c == open  { depth -= 1; if depth == 0 { return i } }
+                i -= 1
+            }
+        }
+        return nil
+    }
+
+    private var bracketHighlightRanges: [NSRange] = []
+
+    @MainActor func updateBracketHighlight() {
+        guard let lm = layoutManager, let ts = textStorage else { return }
+        // Clear previous highlights
+        for r in bracketHighlightRanges {
+            lm.removeTemporaryAttribute(.backgroundColor, forCharacterRange: r)
+        }
+        bracketHighlightRanges = []
+        let sel = selectedRange()
+        // Check position of cursor (sel.location) and one before (sel.location - 1)
+        let candidates = [sel.location, sel.location > 0 ? sel.location - 1 : -1]
+        let text = ts.string as NSString
+        for pos in candidates where pos >= 0 && pos < text.length {
+            if let matchPos = EditorTextView.findMatchingBracket(in: text, at: pos) {
+                let r1 = NSRange(location: pos, length: 1)
+                let r2 = NSRange(location: matchPos, length: 1)
+                let color = NSColor.selectedTextBackgroundColor.withAlphaComponent(0.45)
+                lm.addTemporaryAttributes([.backgroundColor: color], forCharacterRange: r1)
+                lm.addTemporaryAttributes([.backgroundColor: color], forCharacterRange: r2)
+                bracketHighlightRanges = [r1, r2]
+                return  // nur einmal highlighten
+            }
+        }
+    }
 }
 
 // MARK: - Syntax Highlighting
@@ -17490,6 +17558,15 @@ class EditorView: NSView {
                   let storage = self.syntaxStorage, storage.language == .none else { return }
             let detected = SyntaxLanguage.detectFromContent(storage.string)
             if detected != .none { self.setLanguage(detected) }
+        }
+
+        // Bracket highlight — update on every cursor move
+        NotificationCenter.default.addObserver(
+            forName: NSTextView.didChangeSelectionNotification,
+            object: textView,
+            queue: .main
+        ) { [weak self] _ in
+            (self?.textView as? EditorTextView)?.updateBracketHighlight()
         }
 
         scrollView.documentView = textView
