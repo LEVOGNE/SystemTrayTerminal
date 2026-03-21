@@ -5028,7 +5028,7 @@ class BorderlessWindow: NSWindow {
             // Cmd+S / Cmd+Shift+S / Cmd+O: file operations (only when editor tab active)
             if let d = NSApp.delegate as? AppDelegate,
                d.activeTab < d.tabTypes.count, d.tabTypes[d.activeTab] == .editor {
-                let flags2 = event.modifierFlags.intersection([.command, .shift])
+                let flags2 = event.modifierFlags.intersection([.command, .shift, .option])
                 if flags2 == [.command, .shift], event.charactersIgnoringModifiers == "s" {
                     d.saveCurrentEditorAs(); return
                 }
@@ -5057,6 +5057,9 @@ class BorderlessWindow: NSWindow {
                     if flags2 == .command, event.charactersIgnoringModifiers == "f" {
                         (d.activeTab < d.tabEditorViews.count ? d.tabEditorViews[d.activeTab] : nil)?.showFindBar()
                         return
+                    }
+                    if flags2 == [.shift, .option], event.charactersIgnoringModifiers == "f" {
+                        d.formatCurrentDocument(); return
                     }
                 }
             }
@@ -7071,6 +7074,8 @@ class FooterBarView: NSView {
     private var quitBtn: QuitButton!
     private var printerBtn: SymbolHoverButton!
     var onPrint: (() -> Void)?
+    var onFormatDocument: (() -> Void)?
+    private var formatBtn: SymbolHoverButton!
     private(set) var usageBadge: AIUsageBadge!
     // Scroll containers for each column
     private let linksScroll = NSScrollView()
@@ -7226,6 +7231,18 @@ class FooterBarView: NSView {
         printerBtn.onClick = { [weak self] in self?.onPrint?() }
         rechtsContent.addSubview(printerBtn)
 
+        formatBtn = SymbolHoverButton(
+            symbolName: "curlybraces",
+            size: 12,
+            normalColor: NSColor(calibratedWhite: 0.50, alpha: 1.0),
+            hoverColor:  NSColor(calibratedWhite: 0.88, alpha: 1.0),
+            hoverBg: NSColor(calibratedWhite: 1.0, alpha: 0.08),
+            pressBg: NSColor(calibratedWhite: 1.0, alpha: 0.16))
+        formatBtn.toolTip = "Format Document (\u{21E7}\u{2325}F)"
+        formatBtn.isHidden = true  // nur bei Editor-Tabs sichtbar
+        formatBtn.onClick = { [weak self] in self?.onFormatDocument?() }
+        rechtsContent.addSubview(formatBtn)
+
         gearBtn = GearButton(frame: .zero)
         gearBtn.onClick = { [weak self] in self?.onSettings?() }
         rechtsContent.addSubview(gearBtn)
@@ -7292,6 +7309,12 @@ class FooterBarView: NSView {
         printerBtn.frame = NSRect(x: rx, y: cy - printerSize / 2,
                                   width: printerSize, height: printerSize)
         rx += printerSize + gap
+        if !formatBtn.isHidden {
+            let fmtSize: CGFloat = 24
+            formatBtn.frame = NSRect(x: rx, y: cy - fmtSize / 2,
+                                     width: fmtSize, height: fmtSize)
+            rx += fmtSize + gap
+        }
         gearBtn.frame = NSRect(x: rx, y: cy - iconSize / 2, width: iconSize, height: iconSize)
         rx += iconSize + gap
         quitBtn.frame = NSRect(x: rx, y: cy - iconSize / 2, width: iconSize, height: iconSize)
@@ -7339,6 +7362,7 @@ class FooterBarView: NSView {
     func setEditorMode(_ isEditor: Bool) {
         for btn in editorModeButtons { btn.isHidden = !isEditor }
         for btn in shellButtons { btn.isHidden = isEditor }
+        formatBtn.isHidden = !isEditor
         // [0]=⌥⇥  [1]=⌘T  [2]=⌘W  [3]=⌘D  [4]=⌘⇧D
         if tabShortcutBadges.count > 4 {
             tabShortcutBadges[0].isHidden = isEditor  // ⌥⇥ split pane
@@ -17523,7 +17547,7 @@ class EditorView: NSView {
     private var lineGutter: LineGutterView!
     private var modeBar: NSView!
     private var modeBarLabel: NSTextField!
-    private var syntaxStorage: SyntaxTextStorage?
+    var syntaxStorage: SyntaxTextStorage?
     private var wkView: WKWebView?
     var isPreviewActive: Bool { !(wkView?.isHidden ?? true) }
     var vimMode: VimSubMode = .normal
@@ -18465,6 +18489,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 ev.setInputMode(mode)
             }
         }
+        footerView.onFormatDocument = { [weak self] in
+            self?.formatCurrentDocument()
+        }
         window.contentView?.addSubview(footerView)
 
         // AI Usage — always start polling, badge visibility is separate
@@ -18799,6 +18826,171 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.tabEditorDirty[capturedTab] = false
             }
             self.updateHeaderTabs()
+        }
+    }
+
+    func formatCurrentDocument() {
+        guard activeTab < tabEditorViews.count,
+              let ev = tabEditorViews[activeTab],
+              let storage = ev.syntaxStorage else {
+            showGenericToast(badge: "FORMAT", text: "Kein Editor-Tab aktiv",
+                             badgeColor: NSColor(calibratedWhite: 0.35, alpha: 1.0))
+            return
+        }
+        let lang = storage.language
+        let content = ev.textView.string
+
+        // JSON: intern formatieren (kein externes Tool)
+        if lang == .json {
+            guard let data = content.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data),
+                  let pretty = try? JSONSerialization.data(withJSONObject: obj,
+                                                           options: [.prettyPrinted]),
+                  let result = String(data: pretty, encoding: .utf8) else {
+                showGenericToast(badge: "FORMAT", text: "Ungültiges JSON — Formatierung fehlgeschlagen",
+                                 badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0),
+                                 dismissAfter: 5.0)
+                return
+            }
+            replaceEditorContent(ev, with: result)
+            showGenericToast(badge: "FORMAT", text: "JSON formatiert",
+                             badgeColor: NSColor(calibratedRed: 0.18, green: 0.55, blue: 0.34, alpha: 1.0),
+                             dismissAfter: 2.0)
+            return
+        }
+
+        // Externe Tools für andere Sprachen
+        let toolPath: String?
+        let args: [String]
+        let notFoundHint: String
+        switch lang {
+        case .html:
+            let ext = tabEditorURLs[activeTab]?.pathExtension ?? "html"
+            toolPath = findExecutable("npx")
+            args = ["prettier", "--parser", "html", "--stdin-filepath", "file.\(ext)"]
+            notFoundHint = "npm install -g prettier"
+        case .css:
+            toolPath = findExecutable("npx")
+            args = ["prettier", "--parser", "css", "--stdin-filepath", "file.css"]
+            notFoundHint = "npm install -g prettier"
+        case .javascript:
+            toolPath = findExecutable("npx")
+            args = ["prettier", "--parser", "babel", "--stdin-filepath", "file.js"]
+            notFoundHint = "npm install -g prettier"
+        case .python:
+            toolPath = findExecutable("black")
+            args = ["--quiet", "-"]
+            notFoundHint = "pip install black"
+        case .swift:
+            toolPath = findExecutable("swift-format") ?? xcrunFind("swift-format")
+            args = []
+            notFoundHint = "Xcode installieren (enthält swift-format)"
+        default:
+            showGenericToast(badge: "FORMAT", text: "Kein Formatter für \(lang.rawValue)",
+                             badgeColor: NSColor(calibratedWhite: 0.35, alpha: 1.0), dismissAfter: 3.0)
+            return
+        }
+
+        guard let tool = toolPath else {
+            showGenericToast(badge: "FORMAT",
+                             text: "Tool nicht gefunden — \(notFoundHint)",
+                             badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0),
+                             dismissAfter: 6.0)
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                let result = try await self.runFormatter(tool: tool, args: args, input: content)
+                self.replaceEditorContent(ev, with: result)
+                self.showGenericToast(badge: "FORMAT", text: "Fertig",
+                                      badgeColor: NSColor(calibratedRed: 0.18, green: 0.55, blue: 0.34, alpha: 1.0),
+                                      dismissAfter: 2.0)
+            } catch {
+                self.showGenericToast(badge: "FORMAT",
+                                      text: error.localizedDescription,
+                                      badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0),
+                                      dismissAfter: 6.0)
+            }
+        }
+    }
+
+    /// Ersetzt den gesamten Inhalt des Editors als einzelner Undo-Step.
+    private func replaceEditorContent(_ ev: EditorView, with newText: String) {
+        let tv = ev.textView!
+        guard tv.shouldChangeText(in: NSRange(location: 0, length: tv.string.utf16.count),
+                                  replacementString: newText) else { return }
+        tv.textStorage?.replaceCharacters(in: NSRange(location: 0, length: tv.string.utf16.count),
+                                          with: newText)
+        tv.didChangeText()
+    }
+
+    /// Sucht ein ausführbares Tool in PATH-Standardorten.
+    private func findExecutable(_ name: String) -> String? {
+        let paths = ["/usr/local/bin", "/usr/bin", "/opt/homebrew/bin",
+                     "/opt/homebrew/sbin", "/Users/\(NSUserName())/.nvm/current/bin"]
+        return paths.compactMap { dir -> String? in
+            let full = "\(dir)/\(name)"
+            return FileManager.default.isExecutableFile(atPath: full) ? full : nil
+        }.first
+    }
+
+    /// Sucht ein Tool via xcrun (Xcode Command Line Tools).
+    private func xcrunFind(_ name: String) -> String? {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        proc.arguments = ["--find", name]
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = Pipe()
+        guard (try? proc.run()) != nil else { return nil }
+        proc.waitUntilExit()
+        guard proc.terminationStatus == 0 else { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (path?.isEmpty == false) ? path : nil
+    }
+
+    /// Führt einen externen Formatter aus: input via stdin, Ergebnis von stdout.
+    private func runFormatter(tool: String, args: [String], input: String) async throws -> String {
+        return try await withCheckedThrowingContinuation { cont in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let proc = Process()
+                proc.executableURL = URL(fileURLWithPath: tool)
+                proc.arguments = args
+                var env = ProcessInfo.processInfo.environment
+                env["PATH"] = "/usr/local/bin:/usr/bin:/opt/homebrew/bin:/opt/homebrew/sbin:" + (env["PATH"] ?? "")
+                proc.environment = env
+                let inPipe  = Pipe()
+                let outPipe = Pipe()
+                let errPipe = Pipe()
+                proc.standardInput  = inPipe
+                proc.standardOutput = outPipe
+                proc.standardError  = errPipe
+                do {
+                    try proc.run()
+                    if let data = input.data(using: .utf8) {
+                        inPipe.fileHandleForWriting.write(data)
+                    }
+                    inPipe.fileHandleForWriting.closeFile()
+                    proc.waitUntilExit()
+                    guard proc.terminationStatus == 0 else {
+                        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+                        let errMsg  = String(data: errData, encoding: .utf8)?
+                            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "Fehler"
+                        cont.resume(throwing: NSError(
+                            domain: "Formatter", code: Int(proc.terminationStatus),
+                            userInfo: [NSLocalizedDescriptionKey: errMsg.isEmpty ? "Formatter fehlgeschlagen" : errMsg]))
+                        return
+                    }
+                    let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+                    let result  = String(data: outData, encoding: .utf8) ?? input
+                    cont.resume(returning: result)
+                } catch {
+                    cont.resume(throwing: error)
+                }
+            }
         }
     }
 

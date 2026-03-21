@@ -1584,6 +1584,40 @@ func testAutoIndent() {
 testAutoIndent()
 
 // ============================================================================
+// MARK: - JSON Formatter
+// ============================================================================
+
+func formatJSON_Test(_ input: String) -> String? {
+    guard let data = input.data(using: .utf8),
+          let obj = try? JSONSerialization.jsonObject(with: data),
+          let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]),
+          let result = String(data: pretty, encoding: .utf8)
+    else { return nil }
+    return result
+}
+
+func testJSONFormatter() {
+    // Kompakt → Pretty
+    let compact = #"{"b":2,"a":1}"#
+    if let out = formatJSON_Test(compact) {
+        assert(out.contains("\"a\""), "has key a")
+        assert(out.contains("\"b\""), "has key b")
+        assert(out.contains("\n"), "has newlines")
+    } else { assert(false, "valid JSON should format") }
+    // Array
+    if let out = formatJSON_Test("[1,2,3]") {
+        assert(out.contains("1"), "array element 1")
+        assert(out.contains("\n"), "array has newlines")
+    } else { assert(false, "array should format") }
+    // Ungültiges JSON → nil
+    assert(formatJSON_Test("not json") == nil, "invalid JSON should return nil")
+    testsPassed += 1
+    print("✓ JSON formatter — 3 cases")
+}
+
+testJSONFormatter()
+
+// ============================================================================
 // MARK: - Results
 // ============================================================================
 
