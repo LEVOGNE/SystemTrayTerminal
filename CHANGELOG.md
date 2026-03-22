@@ -4,6 +4,16 @@ All notable changes to SystemTrayTerminal are documented here.
 
 ---
 
+## v1.5.10 — 2026-03-22
+
+### Bug Fixes
+
+- **Ghost text overlapping** — Ghost text (history suggestion) was rendered on top of existing terminal cell characters, making both unreadable. Cells covered by ghost text are now skipped in the draw loop so the suggestion appears clean and isolated.
+- **Ghost text double-letter** — Typing `c` with a history match like `claude` showed `cllaude` instead of `claude`. The ghost start column was off by one — the cursor cell itself already had a character from the shell which wasn't suppressed. Fixed: ghost range now starts at `cursorX`, not `cursorX + 1`.
+- **Random bell sounds** — The inactivity bell timer fired automatically after every shell output (8s of silence), causing unexpected "blop" sounds completely unrelated to user actions. The inactivity timer is removed. The real BEL character (ASCII 7) from programs like Claude CLI still plays the bell sound correctly.
+
+---
+
 ## v1.5.9 — 2026-03-22
 
 ### New Features

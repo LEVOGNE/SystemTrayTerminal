@@ -42,7 +42,7 @@
   "description": "A blazing-fast terminal emulator for macOS, written from scratch in a single Swift file. 22,700+ lines, zero dependencies, native Cocoa rendering at 60 FPS.",
   "url": "https://levogne.github.io/SystemTrayTerminal/",
   "downloadUrl": "https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest",
-  "softwareVersion": "1.5.9",
+  "softwareVersion": "1.5.10",
   "fileSize": "3.1 MB",
   "author": {
     "@type": "Person",
@@ -1056,7 +1056,7 @@ footer {
 
   <div class="hero-badge">
     <span class="dot"></span>
-    v1.5.9 — History Autocompletion · Ghost Text · Selection Fix
+    v1.5.10 — Ghost Text Fix · Bell Fix
   </div>
 
   <h1>
@@ -1100,7 +1100,7 @@ footer {
         <noscript>
           <div class="terminal-line"><span class="prompt">~ </span><span class="cmd">neofetch --minimal</span></div>
           <div class="terminal-line"><span class="output">  macOS 15.2 Sequoia</span></div>
-          <div class="terminal-line"><span class="output">  Terminal: <span class="highlight">SystemTrayTerminal v1.5.9</span></span></div>
+          <div class="terminal-line"><span class="output">  Terminal: <span class="highlight">SystemTrayTerminal v1.5.10</span></span></div>
           <div class="terminal-line"><span class="output">  Shell: zsh 5.9</span></div>
           <div class="terminal-line"><span class="prompt">~ </span><span class="cmd">systemtrayterminal --info</span></div>
           <div class="terminal-line"><span class="output">  <span class="amber">22,700+</span> lines | <span class="amber">1</span> file | <span class="amber">0</span> deps | <span class="amber">3.1 MB</span></span></div>
@@ -1332,7 +1332,7 @@ footer {
       <div class="install-card">
         <h3>Direct Download</h3>
         <div class="install-cmd" onclick="window.open('https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest', '_blank')">
-          <span>Download SystemTrayTerminal_v1.5.9.zip</span>
+          <span>Download SystemTrayTerminal_v1.5.10.zip</span>
           <button class="copy-btn" aria-label="Download">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
@@ -1363,12 +1363,28 @@ footer {
 
     <div class="changelog-list">
 
+      <!-- v1.5.10 -->
+      <div class="changelog-entry">
+        <div class="changelog-left">
+          <span class="changelog-ver">v1.5.10</span>
+          <span class="changelog-date">2026-03-22</span>
+          <span class="changelog-tag latest">Latest</span>
+        </div>
+        <div class="changelog-right">
+          <div class="changelog-title">Ghost Text Fix · Bell Fix</div>
+          <div class="changelog-items">
+            <div class="changelog-item"><strong>Ghost Text Overlap Fixed</strong> — History suggestion was rendered on top of existing terminal characters, making both unreadable. Cells covered by ghost text are now suppressed in the draw loop so the suggestion appears clean.</div>
+            <div class="changelog-item"><strong>Ghost Text Double-Letter Fixed</strong> — Typing <code>c</code> with a match like <code>claude</code> showed <code>cllaude</code>. The ghost start column was off by one; fixed to start exactly at the cursor position.</div>
+            <div class="changelog-item"><strong>Random Bell Sounds Removed</strong> — An inactivity timer fired the bell automatically after every shell output (8s silence), causing unexpected sounds. Timer removed. Real BEL characters from programs like Claude CLI still play the bell correctly.</div>
+          </div>
+        </div>
+      </div>
+
       <!-- v1.5.9 -->
       <div class="changelog-entry">
         <div class="changelog-left">
           <span class="changelog-ver">v1.5.9</span>
           <span class="changelog-date">2026-03-22</span>
-          <span class="changelog-tag latest">Latest</span>
         </div>
         <div class="changelog-right">
           <div class="changelog-title">History Autocompletion · Ghost Text · Selection Fix</div>

@@ -11,7 +11,7 @@ import WebKit
 
 // MARK: - Version
 
-let kAppVersion = "1.5.9"
+let kAppVersion = "1.5.10"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -3139,7 +3139,7 @@ class TerminalView: NSView {
         terminal.onBell = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                // bellEnabled defaults to true when key is absent
+                // bellEnabled: real BEL chars (e.g. from Claude CLI) — defaults to true
                 let ud = UserDefaults.standard
                 let bellOn = ud.object(forKey: "bellEnabled") == nil || ud.bool(forKey: "bellEnabled")
                 guard bellOn else { return }
@@ -3330,25 +3330,9 @@ class TerminalView: NSView {
 
     var onShellExit: (() -> Void)?
 
-    /// Starts (or restarts) the inactivity countdown. Fires bell after silence if:
-    /// - bellEnabled is on
-    /// - shell is ready and user has typed at least once
-    /// - alert hasn't already fired for this silence period
-    private func scheduleInactivityAlert() {
-        inactivityWorkItem?.cancel()
-        let ud = UserDefaults.standard
-        let bellOn = ud.object(forKey: "bellEnabled") == nil || ud.bool(forKey: "bellEnabled")
-        guard bellOn, shellReady, hasUserInput, !inactivityAlerted else { return }
-        let delay = max(3.0, ud.double(forKey: "bellInactivityDelay") > 0
-                              ? ud.double(forKey: "bellInactivityDelay") : 8.0)
-        let item = DispatchWorkItem { [weak self] in
-            guard let self = self, !self.inactivityAlerted else { return }
-            self.inactivityAlerted = true
-            self.terminal.onBell?()
-        }
-        inactivityWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
-    }
+    /// Inactivity bell intentionally removed — it fired randomly after shell silence
+    /// and was confused with real BEL chars from programs like Claude CLI.
+    private func scheduleInactivityAlert() { }
 
     func readPTY() {
         // Capture source by reference so we only cancel THIS source, not a newer one
@@ -3493,6 +3477,27 @@ class TerminalView: NSView {
             }
             : []
 
+        // Pre-compute ghost text range so cell loop can skip those columns
+        let ghostRow: Int?
+        let ghostColStart: Int
+        let ghostColEnd: Int
+        if !isScrolledBack, historyActive, !typedBuffer.isEmpty,
+           let suggestion = bestHistorySuggestion(), suggestion.count > typedBuffer.count {
+            let suffix = String(suggestion.dropFirst(typedBuffer.count))
+            let sc = terminal.cursorX
+            let avail = terminal.cols - sc
+            if avail > 0 {
+                let display = String(suffix.prefix(avail))
+                ghostRow = terminal.cursorY
+                ghostColStart = sc
+                ghostColEnd = sc + display.count
+            } else {
+                ghostRow = nil; ghostColStart = 0; ghostColEnd = 0
+            }
+        } else {
+            ghostRow = nil; ghostColStart = 0; ghostColEnd = 0
+        }
+
         // Clip to terminal content area
         ctx.saveGState()
         ctx.clip(to: CGRect(x: 0, y: paddingY, width: bounds.width, height: CGFloat(terminal.rows) * cellH))
@@ -3574,7 +3579,9 @@ class TerminalView: NSView {
                 }
 
                 let blinkHidden = cell.attrs.blink > 0 && !textBlinkVisible
-                if cell.char != " " && cell.char != "\0" && !blinkHidden {
+                // Skip drawing cell char if it's covered by ghost text
+                let inGhostRange = (ghostRow == vrow && col >= ghostColStart && col < ghostColEnd)
+                if cell.char != " " && cell.char != "\0" && !blinkHidden && !inGhostRange {
                     let s = String(cell.char)
                     let f: NSFont
                     if cell.attrs.bold {
@@ -3769,31 +3776,22 @@ class TerminalView: NSView {
         }
 
         // History ghost text — dim suggestion right of cursor (only when live, not scrolled)
-        if !isScrolledBack, historyActive, !typedBuffer.isEmpty {
-            if let suggestion = bestHistorySuggestion(), suggestion.count > typedBuffer.count {
-                let suffix = String(suggestion.dropFirst(typedBuffer.count))
-                let startCol = terminal.cursorX + 1
-                let available = terminal.cols - startCol
-                if available > 0 {
-                    let display = String(suffix.prefix(available))
-                    let gx = CGFloat(startCol) * cellW + paddingX
-                    let gy = CGFloat(terminal.cursorY) * cellH + paddingY
-                    if ghostColorFGCache !== kDefaultFG {
-                        ghostColorFGCache = kDefaultFG
-                        ghostColorCache = kDefaultFG.withAlphaComponent(0.35)
-                    }
-                    let ghostColor = ghostColorCache
-                    NSAttributedString(string: display, attributes: [
-                        .font: font,
-                        .foregroundColor: ghostColor
-                    ]).draw(at: NSPoint(x: gx, y: gy))
-                    currentSuggestion = suggestion
-                } else {
-                    currentSuggestion = nil
-                }
-            } else {
-                currentSuggestion = nil
+        // ghostRow/ghostColStart/ghostColEnd pre-computed above; cell loop already skipped those chars
+        if let gr = ghostRow {
+            let suffix = String(bestHistorySuggestion()!.dropFirst(typedBuffer.count))
+            let avail = terminal.cols - ghostColStart
+            let display = String(suffix.prefix(avail))
+            let gx = CGFloat(ghostColStart) * cellW + paddingX
+            let gy = CGFloat(gr) * cellH + paddingY
+            if ghostColorFGCache !== kDefaultFG {
+                ghostColorFGCache = kDefaultFG
+                ghostColorCache = kDefaultFG.withAlphaComponent(0.35)
             }
+            NSAttributedString(string: display, attributes: [
+                .font: font,
+                .foregroundColor: ghostColorCache
+            ]).draw(at: NSPoint(x: gx, y: gy))
+            currentSuggestion = bestHistorySuggestion()
         } else {
             currentSuggestion = nil
         }
