@@ -4069,8 +4069,42 @@ class TerminalView: NSView {
             } else {
                 writePTY(hasMod ? "\u{1B}[1;\(mod)C" : "\u{1B}\(terminal.appCursorMode ? "O" : "[")C")
             }
-        case 125: writePTY(hasMod ? "\u{1B}[1;\(mod)B" : "\u{1B}\(terminal.appCursorMode ? "O" : "[")B")
-        case 126: writePTY(hasMod ? "\u{1B}[1;\(mod)A" : "\u{1B}\(terminal.appCursorMode ? "O" : "[")A")
+        case 125: // Down arrow
+            if !hasMod, historyActive, historyCycleIndex >= 0 {
+                historyCycleIndex -= 1
+                if historyCycleIndex < 0 {
+                    writePTY(Data([0x15]))
+                    typedBuffer = ""
+                    historyMatches = []
+                    historyCycleIndex = -1
+                } else {
+                    let match = historyMatches[historyCycleIndex]
+                    writePTY(Data([0x15]))
+                    writePTY(match)
+                    typedBuffer = match
+                }
+                dirty = true; needsDisplay = true
+            } else {
+                writePTY(hasMod ? "\u{1B}[1;\(mod)B" : "\u{1B}\(terminal.appCursorMode ? "O" : "[")B")
+            }
+        case 126: // Up arrow
+            if !hasMod, historyActive, !typedBuffer.isEmpty {
+                if historyCycleIndex == -1 {
+                    historyMatches = historyMatchesForPrefix(typedBuffer)
+                }
+                if historyMatches.isEmpty {
+                    writePTY("\u{1B}\(terminal.appCursorMode ? "O" : "[")A")
+                } else {
+                    historyCycleIndex = min(historyCycleIndex + 1, historyMatches.count - 1)
+                    let match = historyMatches[historyCycleIndex]
+                    writePTY(Data([0x15]))  // Ctrl+U: kill line
+                    writePTY(match)
+                    typedBuffer = match
+                    dirty = true; needsDisplay = true
+                }
+            } else {
+                writePTY(hasMod ? "\u{1B}[1;\(mod)A" : "\u{1B}\(terminal.appCursorMode ? "O" : "[")A")
+            }
 
         // --- Navigation keys (with modifier support) ---
         case 115: writePTY(hasMod ? "\u{1B}[1;\(mod)H" : "\u{1B}[H")                // Home
