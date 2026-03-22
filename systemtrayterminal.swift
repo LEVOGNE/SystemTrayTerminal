@@ -3353,7 +3353,10 @@ class TerminalView: NSView {
             let n = read(fd, &buf, buf.count)
             if n > 0 {
                 perf.readBytes += n; perf.readCount += 1
-                if !shellReady { shellReady = true }
+                if !shellReady {
+                    shellReady = true
+                    loadHistory()
+                }
                 let sbBefore = terminal.scrollback.count
                 terminal.process(Data(buf[0..<n]))
                 // Keep viewport anchored when new rows arrive in scrollback
@@ -3470,18 +3473,22 @@ class TerminalView: NSView {
         let extraTop = subPixel > 0.001 ? 1 : 0
         let totalRows = terminal.rows + extraTop
 
+        let S = terminal.scrollback.count
+        let baseIndex = S - lineOff  // first visible line in combined buffer
+
         // Pre-compute selection range (also shown when scrolled back so selection stays visible)
         let selRange = selectionRange()
-        let lastTextCols: [Int] = selRange != nil
-            ? (0..<terminal.rows).map { lastTextCol(row: $0) }
+        // Buffer-aware lastTextCol per visible vrow (indexed by vrow, 0..<totalRows)
+        let selTextCols: [Int] = selRange != nil
+            ? (0..<totalRows).map { vr -> Int in
+                let bi = S - lineOff - extraTop + vr
+                return lastTextColBuf(bi, S: S)
+            }
             : []
 
         // Clip to terminal content area
         ctx.saveGState()
         ctx.clip(to: CGRect(x: 0, y: paddingY, width: bounds.width, height: CGFloat(terminal.rows) * cellH))
-
-        let S = terminal.scrollback.count
-        let baseIndex = S - lineOff  // first visible line in combined buffer
 
         for vrow in 0..<totalRows {
             // Absolute index in combined buffer (scrollback + grid)
@@ -3546,12 +3553,9 @@ class TerminalView: NSView {
 
                 var selected = false
                 if let (lo, hi) = selRange {
-                    // When scrolled back, screen row 0 is at visual row lineOff
-                    let screenRow = isScrolledBack ? vrow - lineOff : vrow
-                    if screenRow >= 0, screenRow < terminal.rows, screenRow < lastTextCols.count {
-                        let cur = screenRow * terminal.cols + col
-                        selected = cur >= lo && cur <= hi && col <= lastTextCols[screenRow]
-                    }
+                    let ltc = selTextCols[vrow]
+                    let cur = bufIdx * terminal.cols + col
+                    selected = cur >= lo && cur <= hi && col <= ltc
                 }
 
                 if selected {
@@ -4057,7 +4061,8 @@ class TerminalView: NSView {
     // MARK: Shift+Arrow selection
 
     func handleShiftArrow(keyCode: UInt16) {
-        let curPos = (row: terminal.cursorY, col: terminal.cursorX)
+        let S = terminal.scrollback.count
+        let curPos = (row: terminal.cursorY + S, col: terminal.cursorX)
         // Initialize selection at cursor if not started
         if selStart == nil {
             selStart = curPos
@@ -4070,11 +4075,11 @@ class TerminalView: NSView {
             if end.col < 0 { end.col = terminal.cols - 1; end.row = max(0, end.row - 1) }
         case 124: // Right
             end.col += 1
-            if end.col >= terminal.cols { end.col = 0; end.row = min(terminal.rows - 1, end.row + 1) }
+            if end.col >= terminal.cols { end.col = 0; end.row = min(S + terminal.rows - 1, end.row + 1) }
         case 126: // Up
             end.row = max(0, end.row - 1)
         case 125: // Down
-            end.row = min(terminal.rows - 1, end.row + 1)
+            end.row = min(S + terminal.rows - 1, end.row + 1)
         default: break
         }
         selEnd = end
@@ -4091,22 +4096,104 @@ class TerminalView: NSView {
     private var isDragging = false
     private var isWordSelect = false
 
+    // MARK: History Autocompletion
+
+    /// Characters typed since last prompt reset (local tracking, no PTY involvement)
+    var typedBuffer: String = ""
+    /// All history entries, newest first, deduped
+    var historyEntries: [String] = []
+    /// Index into historyMatches during Up/Down cycling (-1 = not cycling)
+    private var historyCycleIndex: Int = -1
+    /// History matches for current prefix (built when cycling starts)
+    private var historyMatches: [String] = []
+    /// Currently shown suggestion (full command), or nil
+    var currentSuggestion: String? = nil
+
+    /// Whether history features should be active right now
+    private var historyActive: Bool {
+        terminal.altGrid == nil && terminal.mouseMode == 0
+    }
+
+    /// Load history from shell history files. Newest entries come first.
+    func loadHistory() {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            var entries: [String] = []
+
+            // zsh: ~/.zsh_history — format ": timestamp:elapsed;command" or plain
+            let zshURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".zsh_history")
+            if let raw = try? String(contentsOf: zshURL, encoding: .utf8) {
+                for line in raw.components(separatedBy: "\n") {
+                    let cmd: String
+                    if line.hasPrefix(": "), let semi = line.firstIndex(of: ";") {
+                        cmd = String(line[line.index(after: semi)...]).trimmingCharacters(in: .whitespaces)
+                    } else {
+                        cmd = line.trimmingCharacters(in: .whitespaces)
+                    }
+                    if !cmd.isEmpty { entries.append(cmd) }
+                }
+            }
+
+            // bash: ~/.bash_history — plain lines
+            let bashURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".bash_history")
+            if let raw = try? String(contentsOf: bashURL, encoding: .utf8) {
+                for line in raw.components(separatedBy: "\n") {
+                    let cmd = line.trimmingCharacters(in: .whitespaces)
+                    if !cmd.isEmpty { entries.append(cmd) }
+                }
+            }
+
+            // Dedupe preserving newest occurrence (entries are oldest-first from file)
+            var seen = Set<String>()
+            var deduped: [String] = []
+            for e in entries.reversed() {
+                if seen.insert(e).inserted { deduped.append(e) }
+            }
+            // deduped is now newest-first
+
+            DispatchQueue.main.async {
+                self?.historyEntries = deduped
+            }
+        }
+    }
+
+    /// Best (most recent) history entry with typedBuffer as prefix, or nil
+    func bestHistorySuggestion() -> String? {
+        guard !typedBuffer.isEmpty else { return nil }
+        return historyEntries.first { $0.hasPrefix(typedBuffer) && $0 != typedBuffer }
+    }
+
+    /// All history entries that start with prefix, newest first
+    func historyMatchesForPrefix(_ prefix: String) -> [String] {
+        historyEntries.filter { $0.hasPrefix(prefix) }
+    }
+
     func gridPos(from event: NSEvent) -> (row: Int, col: Int) {
         let loc = convert(event.locationInWindow, from: nil)
         let visualCol = max(0, min(terminal.cols - 1, Int((loc.x - paddingX) / cellW)))
-        let row = max(0, min(terminal.rows - 1, Int((loc.y - paddingY) / cellH)))
-        // Map visual column → logical column for BiDi rows
+        let visualRow = max(0, Int((loc.y - paddingY) / cellH))
+        // Return absolute buffer index: 0..S-1 = scrollback, S..S+rows-1 = grid
+        let S = terminal.scrollback.count
+        let extraTop = smoothScrollY.truncatingRemainder(dividingBy: max(1, cellH)) > 0.001 ? 1 : 0
+        let bufIdx = (S - scrollbackOffset - extraTop) + visualRow
+        let row = max(0, min(S + terminal.rows - 1, bufIdx))
+        // Map visual column → logical column for BiDi (only valid for grid rows)
         var col = visualCol
-        if row < terminal.rows, row < terminal.grid.count {
+        let gridRow = row - S
+        if gridRow >= 0, gridRow < terminal.rows, gridRow < terminal.grid.count {
             let order: [Int]?
-            if row < bidiCacheValid.count && bidiCacheValid[row] {
-                order = bidiCacheData[row]
+            if gridRow < bidiCacheValid.count && bidiCacheValid[gridRow] {
+                order = bidiCacheData[gridRow]
             } else {
-                order = bidiVisualOrder(for: terminal.grid[row], cols: terminal.cols)
+                order = bidiVisualOrder(for: terminal.grid[gridRow], cols: terminal.cols)
             }
             if let o = order, visualCol < o.count { col = o[visualCol] }
         }
         return (row, col)
+    }
+
+    /// Convert buffer index (from gridPos) to grid row for PTY mouse tracking and hyperlinks.
+    private func bufToGridRow(_ bufRow: Int) -> Int {
+        max(0, min(terminal.rows - 1, bufRow - terminal.scrollback.count))
     }
 
     // MARK: Mouse tracking helpers
@@ -4141,8 +4228,9 @@ class TerminalView: NSView {
         // Cmd+Click: open hyperlink
         if event.modifierFlags.contains(.command) {
             let pos = gridPos(from: event)
-            if pos.row >= 0, pos.row < terminal.rows, pos.col >= 0, pos.col < terminal.cols,
-               let url = terminal.grid[pos.row][pos.col].hyperlink,
+            let gr = bufToGridRow(pos.row)
+            if gr >= 0, gr < terminal.rows, pos.col >= 0, pos.col < terminal.cols,
+               let url = terminal.grid[gr][pos.col].hyperlink,
                let nsUrl = URL(string: url),
                let scheme = nsUrl.scheme?.lowercased(),
                ["https", "http", "mailto"].contains(scheme) {
@@ -4166,7 +4254,7 @@ class TerminalView: NSView {
         // Mouse tracking: send event to PTY instead of UI selection
         if terminal.mouseMode >= 1000 {
             let pos = gridPos(from: event)
-            sendMouseEvent(button: 0, x: pos.col, y: pos.row)
+            sendMouseEvent(button: 0, x: pos.col, y: bufToGridRow(pos.row))
             return
         }
         mouseDownPos = gridPos(from: event)
@@ -4193,10 +4281,18 @@ class TerminalView: NSView {
     }
 
     private func wordBounds(at pos: (row: Int, col: Int)) -> ((row: Int, col: Int), (row: Int, col: Int)) {
-        let row = pos.row
-        guard row >= 0 && row < terminal.rows else { return (pos, pos) }
-        let grid = terminal.grid
-        let ch = grid[row][pos.col].char
+        let S = terminal.scrollback.count
+        let gridRow = pos.row - S
+        let rowCells: [Cell]
+        if gridRow >= 0, gridRow < terminal.rows {
+            rowCells = terminal.grid[gridRow]
+        } else if pos.row >= 0, pos.row < S {
+            rowCells = terminal.scrollback[pos.row]
+        } else {
+            return (pos, pos)
+        }
+        guard pos.col < rowCells.count else { return (pos, pos) }
+        let ch = rowCells[pos.col].char
         let isWordChar = { (c: Unicode.Scalar) -> Bool in
             CharacterSet.alphanumerics.contains(c) || c == "_" || c == "-" || c == "."
         }
@@ -4204,10 +4300,10 @@ class TerminalView: NSView {
         var startCol = pos.col
         var endCol = pos.col
         if checkWord {
-            while startCol > 0 && isWordChar(grid[row][startCol - 1].char) { startCol -= 1 }
-            while endCol < terminal.cols - 1 && isWordChar(grid[row][endCol + 1].char) { endCol += 1 }
+            while startCol > 0 && isWordChar(rowCells[startCol - 1].char) { startCol -= 1 }
+            while endCol < terminal.cols - 1 && endCol + 1 < rowCells.count && isWordChar(rowCells[endCol + 1].char) { endCol += 1 }
         }
-        return ((row: row, col: startCol), (row: row, col: endCol))
+        return ((row: pos.row, col: startCol), (row: pos.row, col: endCol))
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -4215,7 +4311,7 @@ class TerminalView: NSView {
         // Mouse tracking: send drag events (button-event mode 1002 or any-event mode 1003)
         if terminal.mouseMode >= 1002 {
             let pos = gridPos(from: event)
-            sendMouseEvent(button: 32, x: pos.col, y: pos.row) // 32 = motion with button 0 held
+            sendMouseEvent(button: 32, x: pos.col, y: bufToGridRow(pos.row))
             return
         }
         if terminal.mouseMode >= 1000 { return } // X10 mode doesn't report drag
@@ -4238,7 +4334,7 @@ class TerminalView: NSView {
         let pos = gridPos(from: event)
         // Any-event tracking (1003): report all motion even without buttons
         if terminal.mouseMode >= 1003, window?.isKeyWindow == true {
-            sendMouseEvent(button: 35, x: pos.col, y: pos.row)
+            sendMouseEvent(button: 35, x: pos.col, y: bufToGridRow(pos.row))
         }
         // Overlay views (e.g. version button) manage their own cursor via cursorUpdate —
         // just return here so iBeam.set() doesn't override them.
@@ -4251,8 +4347,9 @@ class TerminalView: NSView {
             return
         }
 
-        let hasLink = pos.row >= 0 && pos.row < terminal.rows && pos.col < terminal.grid[pos.row].count
-            && terminal.grid[pos.row][pos.col].hyperlink != nil
+        let gr = bufToGridRow(pos.row)
+        let hasLink = gr >= 0 && gr < terminal.rows && pos.col < terminal.grid[gr].count
+            && terminal.grid[gr][pos.col].hyperlink != nil
         if hasLink {
             NSCursor.pointingHand.set()
         } else {
@@ -4265,9 +4362,9 @@ class TerminalView: NSView {
         if terminal.mouseMode >= 1000 {
             let pos = gridPos(from: event)
             if terminal.mouseEncoding == 1006 {
-                sendMouseEvent(button: 0, x: pos.col, y: pos.row, release: true)
+                sendMouseEvent(button: 0, x: pos.col, y: bufToGridRow(pos.row), release: true)
             } else {
-                sendMouseEvent(button: 3, x: pos.col, y: pos.row) // 3 = release in X11 encoding
+                sendMouseEvent(button: 3, x: pos.col, y: bufToGridRow(pos.row))
             }
             return
         }
@@ -4292,7 +4389,7 @@ class TerminalView: NSView {
     override func otherMouseDown(with event: NSEvent) {
         if terminal.mouseMode >= 1000 {
             let pos = gridPos(from: event)
-            sendMouseEvent(button: 1, x: pos.col, y: pos.row)
+            sendMouseEvent(button: 1, x: pos.col, y: bufToGridRow(pos.row))
             return
         }
         super.otherMouseDown(with: event)
@@ -4302,9 +4399,9 @@ class TerminalView: NSView {
         if terminal.mouseMode >= 1000 {
             let pos = gridPos(from: event)
             if terminal.mouseEncoding == 1006 {
-                sendMouseEvent(button: 1, x: pos.col, y: pos.row, release: true)
+                sendMouseEvent(button: 1, x: pos.col, y: bufToGridRow(pos.row), release: true)
             } else {
-                sendMouseEvent(button: 3, x: pos.col, y: pos.row)
+                sendMouseEvent(button: 3, x: pos.col, y: bufToGridRow(pos.row))
             }
             return
         }
@@ -4314,7 +4411,7 @@ class TerminalView: NSView {
     override func rightMouseDown(with event: NSEvent) {
         if terminal.mouseMode >= 1000 {
             let pos = gridPos(from: event)
-            sendMouseEvent(button: 2, x: pos.col, y: pos.row)
+            sendMouseEvent(button: 2, x: pos.col, y: bufToGridRow(pos.row))
             return
         }
         super.rightMouseDown(with: event)
@@ -4324,9 +4421,9 @@ class TerminalView: NSView {
         if terminal.mouseMode >= 1000 {
             let pos = gridPos(from: event)
             if terminal.mouseEncoding == 1006 {
-                sendMouseEvent(button: 2, x: pos.col, y: pos.row, release: true)
+                sendMouseEvent(button: 2, x: pos.col, y: bufToGridRow(pos.row), release: true)
             } else {
-                sendMouseEvent(button: 3, x: pos.col, y: pos.row)
+                sendMouseEvent(button: 3, x: pos.col, y: bufToGridRow(pos.row))
             }
             return
         }
@@ -4545,13 +4642,13 @@ class TerminalView: NSView {
         if isDragging {
             let mouseLoc = window?.mouseLocationOutsideOfEventStream ?? .zero
             let viewLoc = convert(mouseLoc, from: nil)
-            let lineOff = scrollbackOffset
+            let dragS = terminal.scrollback.count
+            let dragExtra = smoothScrollY.truncatingRemainder(dividingBy: max(1, cellH)) > 0.001 ? 1 : 0
             let visualRow = max(0, Int((viewLoc.y - paddingY) / cellH))
-            // TerminalView is flipped: row 0=top, rows-1=bottom
-            // When scrolled back lineOff lines, screen row 0 appears at visual row lineOff
-            let screenRow = max(0, min(terminal.rows - 1, visualRow - lineOff))
             let col = max(0, min(terminal.cols - 1, Int((viewLoc.x - paddingX) / cellW)))
-            selEnd = (row: screenRow, col: col)
+            let bufIdx = (dragS - scrollbackOffset - dragExtra) + visualRow
+            let row = max(0, min(dragS + terminal.rows - 1, bufIdx))
+            selEnd = (row: row, col: col)
         }
     }
 
@@ -4565,6 +4662,22 @@ class TerminalView: NSView {
         return -1
     }
 
+    // Buffer-aware version: bufIdx = absolute buffer index (scrollback + grid)
+    private func lastTextColBuf(_ bufIdx: Int, S: Int) -> Int {
+        let gridRow = bufIdx - S
+        if gridRow >= 0, gridRow < terminal.rows {
+            return lastTextCol(row: gridRow)
+        }
+        if bufIdx >= 0, bufIdx < S {
+            let row = terminal.scrollback[bufIdx]
+            for c in stride(from: min(terminal.cols, row.count) - 1, through: 0, by: -1) {
+                let ch = row[c].char
+                if ch != " " && ch != "\0" { return c }
+            }
+        }
+        return -1
+    }
+
     private func selectionRange() -> (lo: Int, hi: Int)? {
         guard let s = selStart, let e = selEnd else { return nil }
         let a = s.row * terminal.cols + s.col
@@ -4574,26 +4687,28 @@ class TerminalView: NSView {
 
     func isSelected(row: Int, col: Int) -> Bool {
         guard let (lo, hi) = selectionRange() else { return false }
-        let cur = row * terminal.cols + col
+        let cur = (row + terminal.scrollback.count) * terminal.cols + col
         guard cur >= lo && cur <= hi else { return false }
         return col <= lastTextCol(row: row)
     }
 
     func selectedText() -> String? {
         guard let (lo, hi) = selectionRange(), lo != hi else { return nil }
+        let S = terminal.scrollback.count
         var text = ""
         var lastRow = lo / terminal.cols
-        var rowLastCol = lastTextCol(row: lastRow)
+        var rowLastCol = lastTextColBuf(lastRow, S: S)
         for pos in lo...hi {
             let r = pos / terminal.cols
             let c = pos % terminal.cols
             if r != lastRow {
                 text += "\n"
                 lastRow = r
-                rowLastCol = lastTextCol(row: r)
+                rowLastCol = lastTextColBuf(r, S: S)
             }
-            if r < terminal.rows && c < terminal.cols && c <= rowLastCol {
-                text.append(String(terminal.grid[r][c].char))
+            if c < terminal.cols && c <= rowLastCol {
+                let cell = cellForDisplay(bufferIndex: r, col: c, scrollbackCount: S)
+                text.append(String(cell.char))
             }
         }
         // Trim trailing whitespace per line
@@ -4683,8 +4798,9 @@ class TerminalView: NSView {
     }
 
     @objc override func selectAll(_ sender: Any?) {
+        let S = terminal.scrollback.count
         selStart = (row: 0, col: 0)
-        selEnd = (row: terminal.rows - 1, col: terminal.cols - 1)
+        selEnd = (row: S + terminal.rows - 1, col: terminal.cols - 1)
         dirty = true
         needsDisplay = true
     }
@@ -18051,6 +18167,64 @@ enum TabType {
 enum EditorInputMode { case normal, nano, vim }
 enum VimSubMode { case normal, insert }
 
+// MARK: - Hover Focus Manager
+
+/// Activates Chrome windows under the mouse cursor without a click.
+/// Used in WebPicker mode. Uses NSTimer — no permissions needed.
+class HoverFocusManager {
+    private var timer: Timer?
+    private var lastActivatedPID: pid_t = 0
+    private let chromeIDs = ["com.google.Chrome", "com.google.Chrome.canary",
+                              "org.chromium.Chromium"]
+    // Main screen height for AppKit→CG coordinate conversion
+    private var mainScreenH: CGFloat { NSScreen.screens.first?.frame.height ?? 900 }
+
+    func start() {
+        guard timer == nil else { return }
+        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            self?.checkWindowUnderCursor()
+        }
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+        lastActivatedPID = 0
+    }
+
+    private func checkWindowUnderCursor() {
+        // NSEvent.mouseLocation: AppKit coords (origin bottom-left of main screen)
+        // CGWindowListCopyWindowInfo: CG coords (origin top-left of main screen)
+        let nsLoc = NSEvent.mouseLocation
+        let cgLoc = CGPoint(x: nsLoc.x, y: mainScreenH - nsLoc.y)
+
+        guard let list = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+        ) as? [[String: Any]] else { return }
+
+        for win in list {
+            guard let layer  = win[kCGWindowLayer as String]    as? Int, layer == 0,
+                  let pid    = win[kCGWindowOwnerPID as String] as? pid_t,
+                  let bounds = win[kCGWindowBounds as String]   as? [String: CGFloat]
+            else { continue }
+
+            let rect = CGRect(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0,
+                              width: bounds["Width"] ?? 0, height: bounds["Height"] ?? 0)
+            guard rect.contains(cgLoc) else { continue }
+
+            // Topmost window found under cursor
+            guard let app = NSRunningApplication(processIdentifier: pid) else { break }
+            if chromeIDs.contains(app.bundleIdentifier ?? ""), pid != lastActivatedPID {
+                lastActivatedPID = pid
+                app.activate(options: [])
+            } else if pid != lastActivatedPID {
+                lastActivatedPID = 0   // cursor left Chrome
+            }
+            break
+        }
+    }
+}
+
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
@@ -18125,6 +18299,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var commandPalette: CommandPaletteView?
     var webPickerSidebarView: WebPickerSidebarView?
     var webPickerRightDivider: GitPanelDividerView?
+    let hoverFocusManager = HoverFocusManager()
     var sshManagerView: SSHManagerView?
     // Multi-panel sidebar state (order = visual top→bottom)
     var sidebarOrder: [String] = ["git", "picker", "ssh"]
@@ -18220,6 +18395,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Single-instance guard — if already running, activate existing instance and exit
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+            .filter { $0 != NSRunningApplication.current }
+        if !others.isEmpty {
+            others.first?.activate(options: .activateIgnoringOtherApps)
+            NSApp.terminate(nil)
+            return
+        }
+
         // One-time prompt for Full Disk Access
         requestFullDiskAccessIfNeeded()
 
@@ -20145,9 +20329,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             webPickerRightDivider?.animator().alphaValue = 1
         })
         view.connect()
+        hoverFocusManager.start()
     }
 
     private func hideWebPickerSidebar() {
+        hoverFocusManager.stop()
         webPickerSidebarView?.disconnect()
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.15
