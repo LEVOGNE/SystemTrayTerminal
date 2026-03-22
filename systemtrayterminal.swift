@@ -4016,6 +4016,7 @@ class TerminalView: NSView {
         if flags.contains(.control) {
             if let c = event.charactersIgnoringModifiers?.unicodeScalars.first {
                 let v = c.value
+                if v == 0x63 || v == 0x75 { typedBuffer = ""; historyCycleIndex = -1; historyMatches = [] }
                 if v >= 0x61 && v <= 0x7A { writePTY(Data([UInt8(v - 0x60)])); return }
                 if v == 0x40 { writePTY(Data([0])); return }
                 if v >= 0x5B && v <= 0x5F { writePTY(Data([UInt8(v - 0x40)])); return }
@@ -4035,14 +4036,39 @@ class TerminalView: NSView {
 
         switch event.keyCode {
         // --- Fundamental keys ---
-        case 36: writePTY("\r")                                                      // Return
-        case 51: writePTY(Data([0x7F]))                                              // Backspace
-        case 48: writePTY(nsf.contains(.shift) ? "\u{1B}[Z" : "\t")                 // Tab / Shift+Tab
+        case 36:                                                                     // Return
+            typedBuffer = ""
+            historyCycleIndex = -1
+            historyMatches = []
+            writePTY("\r")
+        case 51:                                                                     // Backspace
+            if !typedBuffer.isEmpty { typedBuffer.removeLast() }
+            historyCycleIndex = -1
+            writePTY(Data([0x7F]))
+        case 48:                                                                     // Tab / Shift+Tab
+            if !nsf.contains(.shift), historyActive,
+               let sug = currentSuggestion, sug.count > typedBuffer.count {
+                let suffix = String(sug.dropFirst(typedBuffer.count))
+                typedBuffer = sug
+                historyCycleIndex = -1
+                writePTY(suffix)
+            } else {
+                writePTY(nsf.contains(.shift) ? "\u{1B}[Z" : "\t")
+            }
         case 53: writePTY(Data([0x1B]))                                              // Escape
 
         // --- Arrow keys (with modifier support) ---
         case 123: writePTY(hasMod ? "\u{1B}[1;\(mod)D" : "\u{1B}\(terminal.appCursorMode ? "O" : "[")D")
-        case 124: writePTY(hasMod ? "\u{1B}[1;\(mod)C" : "\u{1B}\(terminal.appCursorMode ? "O" : "[")C")
+        case 124:
+            if !hasMod, historyActive,
+               let sug = currentSuggestion, sug.count > typedBuffer.count {
+                let suffix = String(sug.dropFirst(typedBuffer.count))
+                typedBuffer = sug
+                historyCycleIndex = -1
+                writePTY(suffix)
+            } else {
+                writePTY(hasMod ? "\u{1B}[1;\(mod)C" : "\u{1B}\(terminal.appCursorMode ? "O" : "[")C")
+            }
         case 125: writePTY(hasMod ? "\u{1B}[1;\(mod)B" : "\u{1B}\(terminal.appCursorMode ? "O" : "[")B")
         case 126: writePTY(hasMod ? "\u{1B}[1;\(mod)A" : "\u{1B}\(terminal.appCursorMode ? "O" : "[")A")
 
@@ -4069,7 +4095,14 @@ class TerminalView: NSView {
         case 111: writePTY(hasMod ? "\u{1B}[24;\(mod)~" : "\u{1B}[24~")             // F12
 
         default:
-            if let chars = event.characters, !chars.isEmpty { writePTY(chars) }
+            if let chars = event.characters, !chars.isEmpty {
+                if historyActive, let scalar = chars.unicodeScalars.first,
+                   scalar.value >= 32 && scalar.value != 127 {
+                    typedBuffer += chars
+                    historyCycleIndex = -1
+                }
+                writePTY(chars)
+            }
         }
         // Force immediate redraw after any key to keep cursor responsive
         needsDisplay = true
