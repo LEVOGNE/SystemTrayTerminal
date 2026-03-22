@@ -4055,7 +4055,11 @@ class TerminalView: NSView {
             } else {
                 writePTY(nsf.contains(.shift) ? "\u{1B}[Z" : "\t")
             }
-        case 53: writePTY(Data([0x1B]))                                              // Escape
+        case 53:                                                                     // Escape
+            typedBuffer = ""
+            historyCycleIndex = -1
+            historyMatches = []
+            writePTY(Data([0x1B]))
 
         // --- Arrow keys (with modifier support) ---
         case 123: writePTY(hasMod ? "\u{1B}[1;\(mod)D" : "\u{1B}\(terminal.appCursorMode ? "O" : "[")D")
@@ -4134,6 +4138,7 @@ class TerminalView: NSView {
                    scalar.value >= 32 && scalar.value != 127 {
                     typedBuffer += chars
                     historyCycleIndex = -1
+                    historyMatches = []
                 }
                 writePTY(chars)
             }
