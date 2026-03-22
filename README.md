@@ -20,13 +20,13 @@
 
 ![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=for-the-badge&logo=apple&logoColor=white)
 ![Swift](https://img.shields.io/badge/Swift-5.9-F05138?style=for-the-badge&logo=swift&logoColor=white)
-![Lines](https://img.shields.io/badge/21700%2B_Lines-One_File-blue?style=for-the-badge)
-![App](https://img.shields.io/badge/App-4.8_MB-purple?style=for-the-badge)
+![Lines](https://img.shields.io/badge/22700%2B_Lines-One_File-blue?style=for-the-badge)
+![App](https://img.shields.io/badge/App-3.1_MB-purple?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-Free_for_Personal_Use-green?style=for-the-badge)
 
 <br>
 
-[**Download SystemTrayTerminal.app (v1.5.8)**](https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest) · [**Website**](https://levogne.github.io/SystemTrayTerminal/)
+[**Download SystemTrayTerminal.app (v1.5.9)**](https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest) · [**Website**](https://levogne.github.io/SystemTrayTerminal/)
 
 ---
 

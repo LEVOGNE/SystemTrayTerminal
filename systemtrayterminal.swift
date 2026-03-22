@@ -11,7 +11,7 @@ import WebKit
 
 // MARK: - Version
 
-let kAppVersion = "1.5.8"
+let kAppVersion = "1.5.9"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -2955,6 +2955,9 @@ class TerminalView: NSView {
     private var isFirstResize = true               // fire TIOCSWINSZ immediately on first layout
     private var inactivityWorkItem: DispatchWorkItem?  // fires bell after silence
     private var inactivityAlerted = false              // prevent repeat alert for same silence
+    private var lastBellTime: Date = .distantPast      // debounce rapid BEL characters
+    private var ghostColorFGCache: NSColor? = nil      // invalidated when kDefaultFG changes
+    private var ghostColorCache: NSColor = .clear
     private var hasUserInput = false                   // only alert after user has typed something
     var source: DispatchSourceRead?
     var refreshTimer: Timer?
@@ -3135,11 +3138,15 @@ class TerminalView: NSView {
         terminal.onResponse = { [weak self] response in self?.writePTY(response) }
         terminal.onBell = { [weak self] in
             DispatchQueue.main.async {
-                guard self != nil else { return }
+                guard let self = self else { return }
                 // bellEnabled defaults to true when key is absent
                 let ud = UserDefaults.standard
                 let bellOn = ud.object(forKey: "bellEnabled") == nil || ud.bool(forKey: "bellEnabled")
                 guard bellOn else { return }
+                // Debounce: ignore rapid BEL characters (e.g. from scripts with many bells)
+                let now = Date()
+                guard now.timeIntervalSince(self.lastBellTime) > 0.5 else { return }
+                self.lastBellTime = now
                 NSSound(named: "Purr")?.play()
                 (NSApp.delegate as? AppDelegate)?.flashTrayIconIfNeeded()
             }
@@ -3771,7 +3778,11 @@ class TerminalView: NSView {
                     let display = String(suffix.prefix(available))
                     let gx = CGFloat(startCol) * cellW + paddingX
                     let gy = CGFloat(terminal.cursorY) * cellH + paddingY
-                    let ghostColor = NSColor(white: 0.55, alpha: 0.7)
+                    if ghostColorFGCache !== kDefaultFG {
+                        ghostColorFGCache = kDefaultFG
+                        ghostColorCache = kDefaultFG.withAlphaComponent(0.35)
+                    }
+                    let ghostColor = ghostColorCache
                     NSAttributedString(string: display, attributes: [
                         .font: font,
                         .foregroundColor: ghostColor
@@ -3946,13 +3957,18 @@ class TerminalView: NSView {
             if event.keyCode == 123 { writePTY(Data([0x01])); return } // Left arrow
             if event.keyCode == 124 { writePTY(Data([0x05])); return } // Right arrow
             // Cmd+Backspace → kill entire line (Ctrl+U)
-            if event.keyCode == 51 { writePTY(Data([0x15])); return }
+            if event.keyCode == 51 {
+                clearHistoryState()
+                writePTY(Data([0x15])); return
+            }
             switch event.charactersIgnoringModifiers {
             case "v": paste(); return
             case "c": copyText(nil); return
             case "a": selectAll(nil); return
             case "z": writePTY(Data([0x1F])); return   // Cmd+Z → undo (Ctrl+_, readline undo)
-            case "\\": writePTY(Data([0x15])); return // Cmd+\ → kill line (Ctrl+U)
+            case "\\":  // Cmd+\ → kill line (Ctrl+U)
+                clearHistoryState()
+                writePTY(Data([0x15])); return
             case "d", "D":
                 if let d = NSApp.delegate as? AppDelegate {
                     if flags.contains(.shift) {
@@ -4016,7 +4032,7 @@ class TerminalView: NSView {
         if flags.contains(.control) {
             if let c = event.charactersIgnoringModifiers?.unicodeScalars.first {
                 let v = c.value
-                if v == 0x63 || v == 0x75 { typedBuffer = ""; historyCycleIndex = -1; historyMatches = [] }
+                if v == 0x63 || v == 0x75 { clearHistoryState() }
                 if v >= 0x61 && v <= 0x7A { writePTY(Data([UInt8(v - 0x60)])); return }
                 if v == 0x40 { writePTY(Data([0])); return }
                 if v >= 0x5B && v <= 0x5F { writePTY(Data([UInt8(v - 0x40)])); return }
@@ -4037,28 +4053,24 @@ class TerminalView: NSView {
         switch event.keyCode {
         // --- Fundamental keys ---
         case 36:                                                                     // Return
-            typedBuffer = ""
-            historyCycleIndex = -1
-            historyMatches = []
+            clearHistoryState()
             writePTY("\r")
         case 51:                                                                     // Backspace
             if !typedBuffer.isEmpty { typedBuffer.removeLast() }
-            historyCycleIndex = -1
+            clearHistoryCycle()
             writePTY(Data([0x7F]))
         case 48:                                                                     // Tab / Shift+Tab
             if !nsf.contains(.shift), historyActive,
                let sug = currentSuggestion, sug.count > typedBuffer.count {
                 let suffix = String(sug.dropFirst(typedBuffer.count))
                 typedBuffer = sug
-                historyCycleIndex = -1
+                clearHistoryCycle()
                 writePTY(suffix)
             } else {
                 writePTY(nsf.contains(.shift) ? "\u{1B}[Z" : "\t")
             }
         case 53:                                                                     // Escape
-            typedBuffer = ""
-            historyCycleIndex = -1
-            historyMatches = []
+            clearHistoryState()
             writePTY(Data([0x1B]))
 
         // --- Arrow keys (with modifier support) ---
@@ -4068,7 +4080,7 @@ class TerminalView: NSView {
                let sug = currentSuggestion, sug.count > typedBuffer.count {
                 let suffix = String(sug.dropFirst(typedBuffer.count))
                 typedBuffer = sug
-                historyCycleIndex = -1
+                clearHistoryCycle()
                 writePTY(suffix)
             } else {
                 writePTY(hasMod ? "\u{1B}[1;\(mod)C" : "\u{1B}\(terminal.appCursorMode ? "O" : "[")C")
@@ -4078,9 +4090,7 @@ class TerminalView: NSView {
                 historyCycleIndex -= 1
                 if historyCycleIndex < 0 {
                     writePTY(Data([0x15]))
-                    typedBuffer = ""
-                    historyMatches = []
-                    historyCycleIndex = -1
+                    clearHistoryState()
                 } else {
                     let match = historyMatches[historyCycleIndex]
                     writePTY(Data([0x15]))
@@ -4137,8 +4147,7 @@ class TerminalView: NSView {
                 if historyActive, let scalar = chars.unicodeScalars.first,
                    scalar.value >= 32 && scalar.value != 127 {
                     typedBuffer += chars
-                    historyCycleIndex = -1
-                    historyMatches = []
+                    clearHistoryCycle()
                 }
                 writePTY(chars)
             }
@@ -4197,7 +4206,15 @@ class TerminalView: NSView {
     // MARK: History Autocompletion
 
     /// Characters typed since last prompt reset (local tracking, no PTY involvement)
-    var typedBuffer: String = ""
+    var typedBuffer: String = "" {
+        didSet {
+            guard typedBuffer != oldValue else { return }
+            cachedBestSuggestion = typedBuffer.isEmpty ? nil
+                : historyEntries.first { $0.hasPrefix(typedBuffer) && $0 != typedBuffer }
+        }
+    }
+    /// Cached result of bestHistorySuggestion — updated on typedBuffer change or history load
+    private var cachedBestSuggestion: String? = nil
     /// All history entries, newest first, deduped
     private(set) var historyEntries: [String] = []
     /// Index into historyMatches during Up/Down cycling (-1 = not cycling)
@@ -4234,11 +4251,12 @@ class TerminalView: NSView {
                 }
             }
 
-            // bash: ~/.bash_history — plain lines
+            // bash: ~/.bash_history — plain lines (skip HISTTIMEFORMAT timestamp lines starting with #)
             let bashURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".bash_history")
             if let raw = (try? String(contentsOf: bashURL, encoding: .utf8))
                        ?? (try? String(contentsOf: bashURL, encoding: .isoLatin1)) {
                 for line in raw.components(separatedBy: "\n") {
+                    if line.hasPrefix("#") { continue }  // skip HISTTIMEFORMAT timestamp lines
                     let cmd = line.trimmingCharacters(in: .whitespaces)
                     if !cmd.isEmpty { entries.append(cmd) }
                 }
@@ -4253,20 +4271,33 @@ class TerminalView: NSView {
             // deduped is now newest-first
 
             DispatchQueue.main.async {
-                self?.historyEntries = deduped
+                guard let self = self else { return }
+                self.historyEntries = deduped
+                // Refresh cache in case typedBuffer was already non-empty when entries loaded
+                self.cachedBestSuggestion = self.typedBuffer.isEmpty ? nil
+                    : deduped.first { $0.hasPrefix(self.typedBuffer) && $0 != self.typedBuffer }
             }
         }
     }
 
-    /// Best (most recent) history entry with typedBuffer as prefix, or nil
-    func bestHistorySuggestion() -> String? {
-        guard !typedBuffer.isEmpty else { return nil }
-        return historyEntries.first { $0.hasPrefix(typedBuffer) && $0 != typedBuffer }
+    /// Best (most recent) history entry with typedBuffer as prefix, or nil (cached)
+    func bestHistorySuggestion() -> String? { cachedBestSuggestion }
+
+    /// All history entries that start with prefix, newest first (excludes exact match)
+    private func historyMatchesForPrefix(_ prefix: String) -> [String] {
+        historyEntries.filter { $0.hasPrefix(prefix) && $0 != prefix }
     }
 
-    /// All history entries that start with prefix, newest first
-    func historyMatchesForPrefix(_ prefix: String) -> [String] {
-        historyEntries.filter { $0.hasPrefix(prefix) }
+    /// Resets cycling state when prefix changes (Backspace, Tab/Right accept, printable char)
+    private func clearHistoryCycle() {
+        historyCycleIndex = -1
+        historyMatches = []
+    }
+
+    /// Clears typed buffer and history cycling state (e.g. after Enter, Escape, Ctrl+U)
+    private func clearHistoryState() {
+        typedBuffer = ""
+        clearHistoryCycle()
     }
 
     func gridPos(from event: NSEvent) -> (row: Int, col: Int) {

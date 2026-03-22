@@ -4,6 +4,25 @@ All notable changes to SystemTrayTerminal are documented here.
 
 ---
 
+## v1.5.9 — 2026-03-22
+
+### New Features
+
+- **Shell History Autocompletion** — Inline ghost-text suggestion appears to the right of the cursor as you type, showing the most recent history entry that matches your prefix. Accept with Tab or →. Works with both `~/.zsh_history` and `~/.bash_history`. Automatically disabled in TUI apps (vim, htop, etc.) and when mouse tracking is active.
+- **History Arrow-Key Cycling** — Press ↑ while text is typed to cycle through all matching history entries (prefix-filtered, newest first). ↓ cycles back. Ctrl+U to clear. Behaves exactly like native terminal history but filtered to your current prefix.
+
+### Bug Fixes
+
+- **Bell sound going wild** — Multiple BEL characters in rapid succession (e.g. from scripts with loops) no longer stack up and play the sound repeatedly. 500ms debounce prevents more than 2 plays per second.
+- **Mouse selection off when scrolled** — Text selection was using grid-only row coordinates (0..rows-1) instead of absolute buffer indices spanning scrollback + grid. Selecting while scrolled back now highlights exactly the right text.
+
+### Improvements
+
+- **Ghost text color adapts to theme** — Previously hardcoded grey, now derived from the active foreground color (`kDefaultFG`) with reduced opacity. Looks correct on Dark, Light, OLED, and System themes.
+- **History suggestion cached** — Best-match scan moved from the 60fps draw loop into a `typedBuffer` property observer. No more linear history scan on every rendered frame.
+
+---
+
 ## v1.5.8 — 2026-03-21
 
 ### New Features
