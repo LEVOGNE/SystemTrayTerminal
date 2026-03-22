@@ -3761,6 +3761,32 @@ class TerminalView: NSView {
             }
         }
 
+        // History ghost text — dim suggestion right of cursor (only when live, not scrolled)
+        if !isScrolledBack, historyActive, !typedBuffer.isEmpty {
+            if let suggestion = bestHistorySuggestion(), suggestion.count > typedBuffer.count {
+                let suffix = String(suggestion.dropFirst(typedBuffer.count))
+                let startCol = terminal.cursorX + 1
+                let available = terminal.cols - startCol
+                if available > 0 {
+                    let display = String(suffix.prefix(available))
+                    let gx = CGFloat(startCol) * cellW + paddingX
+                    let gy = CGFloat(terminal.cursorY) * cellH + paddingY
+                    let ghostColor = NSColor(white: 0.55, alpha: 0.7)
+                    NSAttributedString(string: display, attributes: [
+                        .font: font,
+                        .foregroundColor: ghostColor
+                    ]).draw(at: NSPoint(x: gx, y: gy))
+                    currentSuggestion = suggestion
+                } else {
+                    currentSuggestion = nil
+                }
+            } else {
+                currentSuggestion = nil
+            }
+        } else {
+            currentSuggestion = nil
+        }
+
         // Sixel images (only in live view)
         if !isScrolledBack {
             for img in terminal.sixelImages {
