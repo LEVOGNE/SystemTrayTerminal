@@ -4101,7 +4101,7 @@ class TerminalView: NSView {
     /// Characters typed since last prompt reset (local tracking, no PTY involvement)
     var typedBuffer: String = ""
     /// All history entries, newest first, deduped
-    var historyEntries: [String] = []
+    private(set) var historyEntries: [String] = []
     /// Index into historyMatches during Up/Down cycling (-1 = not cycling)
     private var historyCycleIndex: Int = -1
     /// History matches for current prefix (built when cycling starts)
@@ -4121,8 +4121,11 @@ class TerminalView: NSView {
 
             // zsh: ~/.zsh_history — format ": timestamp:elapsed;command" or plain
             let zshURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".zsh_history")
-            if let raw = try? String(contentsOf: zshURL, encoding: .utf8) {
+            if let raw = (try? String(contentsOf: zshURL, encoding: .utf8))
+                       ?? (try? String(contentsOf: zshURL, encoding: .isoLatin1)) {
                 for line in raw.components(separatedBy: "\n") {
+                    // Skip multi-line continuation lines (start with tab in zsh extended history)
+                    if line.hasPrefix("\t") { continue }
                     let cmd: String
                     if line.hasPrefix(": "), let semi = line.firstIndex(of: ";") {
                         cmd = String(line[line.index(after: semi)...]).trimmingCharacters(in: .whitespaces)
@@ -4135,7 +4138,8 @@ class TerminalView: NSView {
 
             // bash: ~/.bash_history — plain lines
             let bashURL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".bash_history")
-            if let raw = try? String(contentsOf: bashURL, encoding: .utf8) {
+            if let raw = (try? String(contentsOf: bashURL, encoding: .utf8))
+                       ?? (try? String(contentsOf: bashURL, encoding: .isoLatin1)) {
                 for line in raw.components(separatedBy: "\n") {
                     let cmd = line.trimmingCharacters(in: .whitespaces)
                     if !cmd.isEmpty { entries.append(cmd) }
