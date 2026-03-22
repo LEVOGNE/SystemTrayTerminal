@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SystemTrayTerminal — A 22k-line single-file terminal emulator for macOS</title>
-<meta name="description" content="A blazing-fast terminal emulator for macOS. 22,700+ lines of pure Swift, zero dependencies, native Cocoa rendering at 60 FPS. Free download. SSH Manager, color themes, tray detach, WebPicker. Lives in your menu bar with global hotkey.">
+<meta name="description" content="A blazing-fast terminal emulator for macOS. 22,800+ lines of pure Swift, zero dependencies, native Cocoa rendering at 60 FPS. Free download. SSH Manager, color themes, tray detach, WebPicker. Lives in your menu bar with global hotkey.">
 <meta name="keywords" content="terminal emulator, macOS terminal, Swift terminal, command line, developer tools, iTerm2 alternative, Terminal.app alternative, menu bar terminal, open source terminal, macOS developer tools">
 <meta name="author" content="Levent Ersen (LEVOGNE)">
 <meta name="robots" content="index, follow">
@@ -12,7 +12,7 @@
 
 <!-- Open Graph / Facebook -->
 <meta property="og:title" content="SystemTrayTerminal — Fast Terminal Emulator for macOS">
-<meta property="og:description" content="22,700+ lines of pure Swift. One file. Zero dependencies. 3.1 MB. SSH Manager, themes, shortcuts, SHA256-verified auto-updater. Free for personal use.">
+<meta property="og:description" content="22,800+ lines of pure Swift. One file. Zero dependencies. 3.1 MB. SSH Manager, themes, shortcuts, SHA256-verified auto-updater. Free for personal use.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://levogne.github.io/SystemTrayTerminal/">
 <meta property="og:image" content="https://raw.githubusercontent.com/LEVOGNE/SystemTrayTerminal/main/SystemTrayTerminal.gif">
@@ -24,7 +24,7 @@
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="SystemTrayTerminal — Terminal Emulator for macOS">
-<meta name="twitter:description" content="22,700+ lines. One Swift file. Zero dependencies. SSH Manager, color themes, SHA256-verified auto-updater. Free download.">
+<meta name="twitter:description" content="22,800+ lines. One Swift file. Zero dependencies. SSH Manager, color themes, SHA256-verified auto-updater. Free download.">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/LEVOGNE/SystemTrayTerminal/main/SystemTrayTerminal.gif">
 
 <!-- Favicon -->
@@ -39,10 +39,10 @@
   "name": "SystemTrayTerminal",
   "operatingSystem": "macOS",
   "applicationCategory": "DeveloperApplication",
-  "description": "A blazing-fast terminal emulator for macOS, written from scratch in a single Swift file. 22,700+ lines, zero dependencies, native Cocoa rendering at 60 FPS.",
+  "description": "A blazing-fast terminal emulator for macOS, written from scratch in a single Swift file. 22,800+ lines, zero dependencies, native Cocoa rendering at 60 FPS.",
   "url": "https://levogne.github.io/SystemTrayTerminal/",
   "downloadUrl": "https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest",
-  "softwareVersion": "1.5.10",
+  "softwareVersion": "1.5.11",
   "fileSize": "3.1 MB",
   "author": {
     "@type": "Person",
@@ -1056,7 +1056,7 @@ footer {
 
   <div class="hero-badge">
     <span class="dot"></span>
-    v1.5.10 — Ghost Text Fix · Bell Fix
+    v1.5.11 — PTY Stability · Kill Process · TTY Reset
   </div>
 
   <h1>
@@ -1069,7 +1069,7 @@ footer {
   </p>
 
   <div class="hero-stats">
-    <span class="hero-stat"><strong>22,700+</strong> lines</span>
+    <span class="hero-stat"><strong>22,800+</strong> lines</span>
     <span class="hero-stat"><strong>1</strong> file</span>
     <span class="hero-stat"><strong>0</strong> dependencies</span>
     <span class="hero-stat"><strong>3.1 MB</strong> app</span>
@@ -1100,10 +1100,10 @@ footer {
         <noscript>
           <div class="terminal-line"><span class="prompt">~ </span><span class="cmd">neofetch --minimal</span></div>
           <div class="terminal-line"><span class="output">  macOS 15.2 Sequoia</span></div>
-          <div class="terminal-line"><span class="output">  Terminal: <span class="highlight">SystemTrayTerminal v1.5.10</span></span></div>
+          <div class="terminal-line"><span class="output">  Terminal: <span class="highlight">SystemTrayTerminal v1.5.11</span></span></div>
           <div class="terminal-line"><span class="output">  Shell: zsh 5.9</span></div>
           <div class="terminal-line"><span class="prompt">~ </span><span class="cmd">systemtrayterminal --info</span></div>
-          <div class="terminal-line"><span class="output">  <span class="amber">22,700+</span> lines | <span class="amber">1</span> file | <span class="amber">0</span> deps | <span class="amber">3.1 MB</span></span></div>
+          <div class="terminal-line"><span class="output">  <span class="amber">22,800+</span> lines | <span class="amber">1</span> file | <span class="amber">0</span> deps | <span class="amber">3.1 MB</span></span></div>
           <div class="terminal-line"><span class="output">  Parser: 13-state FSM | Render: 60 FPS CGContext</span></div>
           <div class="terminal-line"><span class="output">  Colors: 24-bit TrueColor | Graphics: Sixel</span></div>
         </noscript>
@@ -1332,7 +1332,7 @@ footer {
       <div class="install-card">
         <h3>Direct Download</h3>
         <div class="install-cmd" onclick="window.open('https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest', '_blank')">
-          <span>Download SystemTrayTerminal_v1.5.10.zip</span>
+          <span>Download SystemTrayTerminal_v1.5.11.zip</span>
           <button class="copy-btn" aria-label="Download">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
@@ -1363,12 +1363,31 @@ footer {
 
     <div class="changelog-list">
 
+      <!-- v1.5.11 -->
+      <div class="changelog-entry">
+        <div class="changelog-left">
+          <span class="changelog-ver">v1.5.11</span>
+          <span class="changelog-date">2026-03-22</span>
+          <span class="changelog-tag latest">Latest</span>
+        </div>
+        <div class="changelog-right">
+          <div class="changelog-title">PTY Stability · Kill Process · TTY Reset</div>
+          <div class="changelog-items">
+            <div class="changelog-item"><strong>Sane PTY Termios</strong> — PTY now initialised with explicit sane termios (ISIG, ICANON, ECHO, ONLCR, correct control chars). Previously inherited the GUI app's undefined terminal state, causing zsh to get stuck after processes like Cargo servers exited in raw mode.</div>
+            <div class="changelog-item"><strong>Kill Process Command</strong> — New command palette entry "Kill Process" (Double-Ctrl → search) sends SIGKILL to the foreground process group only, leaving the shell alive. Safe guard: does nothing if the shell itself is the foreground process.</div>
+            <div class="changelog-item"><strong>Reset TTY Command</strong> — New command palette entry "Reset TTY" kills any stuck foreground process, restores the saved termios snapshot, and sends Ctrl+L to redraw the prompt. Recovers a terminal that got stuck in raw mode.</div>
+            <div class="changelog-item"><strong>writePTY EAGAIN Fix</strong> — Large pastes (>15 KB) could silently drop bytes when the PTY buffer filled. Restored EAGAIN retry loop with correct EINTR handling (immediate retry, no sleep).</div>
+            <div class="changelog-item"><strong>EditorView Memory Leak Fixed</strong> — Block-based NotificationCenter observers in EditorView were never removed. Now stored as tokens and cleaned up in deinit.</div>
+            <div class="changelog-item"><strong>FD Leak in TerminalView Fixed</strong> — masterFd was never closed on failed init paths where the dispatch source was nil. Now closed explicitly in deinit fallback.</div>
+          </div>
+        </div>
+      </div>
+
       <!-- v1.5.10 -->
       <div class="changelog-entry">
         <div class="changelog-left">
           <span class="changelog-ver">v1.5.10</span>
           <span class="changelog-date">2026-03-22</span>
-          <span class="changelog-tag latest">Latest</span>
         </div>
         <div class="changelog-right">
           <div class="changelog-title">Ghost Text Fix · Bell Fix</div>

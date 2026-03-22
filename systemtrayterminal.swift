@@ -11,7 +11,7 @@ import WebKit
 
 // MARK: - Version
 
-let kAppVersion = "1.5.10"
+let kAppVersion = "1.5.11"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -2901,7 +2901,6 @@ struct PerfMetrics {
     // PTY write metrics
     var writeBytes = 0
     var writeCount = 0
-    var writeRetries = 0
     // Computed rates (updated by sampling timer)
     var fps: Double = 0
     var avgDrawMs: Double = 0
@@ -2925,7 +2924,7 @@ struct PerfMetrics {
         // Reset counters
         drawCount = 0; drawTimeSum = 0
         readBytes = 0; readCount = 0
-        writeBytes = 0; writeCount = 0; writeRetries = 0
+        writeBytes = 0; writeCount = 0
         lastSampleTime = now
     }
 }
@@ -3195,7 +3194,8 @@ class TerminalView: NSView {
         textBlinkTimer?.invalidate()
         momentumTimer?.invalidate()
         winSizeWorkItem?.cancel()
-        source?.cancel()           // cancel handler closes masterFd
+        if let src = source { src.cancel() }  // cancel handler closes masterFd
+        else if masterFd >= 0 { close(masterFd) }  // no source: close directly to avoid FD leak
         let pid = childPid
         if pid > 0 { DispatchQueue.global().async { waitpid(pid, nil, 0) } }
     }
@@ -3214,6 +3214,7 @@ class TerminalView: NSView {
     var currentShell = "/bin/zsh"
     var tabId: String = UUID().uuidString
     var shellReady = false
+    var savedTermios = termios()
 
     // Resolved once at startup — safe to use in forked child
     static let shellConfigDir: String = {
@@ -3245,8 +3246,33 @@ class TerminalView: NSView {
         }
         var ws = winsize(ws_row: UInt16(terminal.rows), ws_col: UInt16(terminal.cols),
                          ws_xpixel: UInt16(frame.width), ws_ypixel: UInt16(frame.height))
+        // Explicit sane termios — passing nil inherits the GUI app's (no-terminal) settings,
+        // where ISIG may be unset → Ctrl+C never sends SIGINT, and after a server leaves the
+        // PTY in raw mode, zsh can't restore to a sane state (it restores its own bad save).
+        var t = termios()
+        t.c_iflag = tcflag_t(ICRNL | IXON)
+        t.c_oflag = tcflag_t(OPOST | ONLCR)
+        t.c_cflag = tcflag_t(CS8 | CREAD | HUPCL)
+        t.c_lflag = tcflag_t(ICANON | ISIG | IEXTEN | ECHO | ECHOE | ECHOK)
+        cfsetispeed(&t, speed_t(B38400))
+        cfsetospeed(&t, speed_t(B38400))
+        withUnsafeMutableBytes(of: &t.c_cc) { buf in
+            // Disable all entries first (_POSIX_VDISABLE = 0xFF on macOS).
+            // Zero-init would bind control actions to NUL bytes.
+            for i in 0..<buf.count { buf[i] = 0xFF }
+            buf[Int(VINTR)]  = 0x03  // Ctrl+C
+            buf[Int(VQUIT)]  = 0x1C  // Ctrl+\
+            buf[Int(VERASE)] = 0x7F  // Backspace
+            buf[Int(VKILL)]  = 0x15  // Ctrl+U
+            buf[Int(VEOF)]   = 0x04  // Ctrl+D
+            buf[Int(VSUSP)]  = 0x1A  // Ctrl+Z
+            buf[Int(VSTART)] = 0x11  // Ctrl+Q
+            buf[Int(VSTOP)]  = 0x13  // Ctrl+S
+            buf[Int(VMIN)]   = 1
+            buf[Int(VTIME)]  = 0
+        }
         var fd: Int32 = 0
-        let pid = forkpty(&fd, nil, nil, &ws)
+        let pid = forkpty(&fd, nil, &t, &ws)
         if pid == 0 {
             chdir(startDirC)
             setenv("TERM", "xterm-256color", 1)
@@ -3289,6 +3315,7 @@ class TerminalView: NSView {
         }
         masterFd = fd
         childPid = pid
+        savedTermios = t
         let flags = fcntl(fd, F_GETFL)
         _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
     }
@@ -3366,6 +3393,11 @@ class TerminalView: NSView {
                 scheduleInactivityAlert()
             } else {
                 if n == 0 || (errno != EAGAIN && errno != EINTR) {
+                    tcflush(fd, TCIFLUSH)  // drain buffered input so stale keys don't reach next command
+                    // Reset terminal modes a crashed process may have left behind
+                    terminal.mouseMode = 0
+                    terminal.mouseEncoding = 0
+                    terminal.bracketedPasteMode = false
                     mySource?.cancel()
                     if source === mySource { source = nil }
                     let pid = childPid
@@ -3397,18 +3429,18 @@ class TerminalView: NSView {
         data.withUnsafeBytes { ptr in
             guard let base = ptr.baseAddress else { return }
             var off = 0
-            var retries = 0
+            var eagainCount = 0
             while off < data.count {
                 let n = write(fd, base + off, data.count - off)
                 if n > 0 {
                     off += n
-                    retries = 0
-                } else if n < 0 && (errno == EAGAIN || errno == EINTR) {
-                    retries += 1
-                    perf.writeRetries += 1
-                    if retries > 5 { break } // 5ms max to avoid blocking main thread
+                    eagainCount = 0
+                } else if n < 0 && errno == EINTR {
+                    continue  // signal interrupted — retry immediately, no sleep
+                } else if n < 0 && errno == EAGAIN {
+                    eagainCount += 1
+                    if eagainCount > 5 { break }  // 5ms max — avoids blocking main thread indefinitely
                     usleep(1000)
-                    continue
                 } else {
                     break
                 }
@@ -3418,6 +3450,27 @@ class TerminalView: NSView {
 
     func writePTY(_ string: String) {
         if let d = string.data(using: .utf8) { writePTY(d) }
+    }
+
+    /// Kill the foreground process group (not the shell) with SIGKILL.
+    /// No-op if the shell itself is in the foreground (nothing to kill).
+    func killForegroundProcess() {
+        guard masterFd >= 0 else { return }
+        let fgpgrp = tcgetpgrp(masterFd)
+        let shellPgrp = getpgid(childPid)
+        guard fgpgrp > 0, fgpgrp != shellPgrp else { return }
+        killpg(fgpgrp, SIGKILL)
+    }
+
+    /// Restore the PTY to the initial sane termios set at fork time.
+    /// Kills any foreground process first — a running raw-mode process would
+    /// immediately overwrite the restored settings otherwise.
+    func resetTermiosModes() {
+        guard masterFd >= 0 else { return }
+        killForegroundProcess()
+        var t = savedTermios
+        tcsetattr(masterFd, TCSANOW, &t)
+        writePTY(Data([0x0C]))  // Ctrl+L: redraw prompt without executing
     }
 
     // MARK: Drawing
@@ -17809,6 +17862,7 @@ class EditorView: NSView {
     private var findBar: FindReplaceBar?
     private var findMatches: [NSRange] = []
     private var findMatchIndex: Int = 0
+    private var notificationTokens: [NSObjectProtocol] = []
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -17816,6 +17870,10 @@ class EditorView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        notificationTokens.forEach { NotificationCenter.default.removeObserver($0) }
+    }
 
     private func setup() {
         let modeBarH: CGFloat = 26
@@ -17866,13 +17924,13 @@ class EditorView: NSView {
         }
 
         // Bracket highlight — update on every cursor move
-        NotificationCenter.default.addObserver(
+        notificationTokens.append(NotificationCenter.default.addObserver(
             forName: NSTextView.didChangeSelectionNotification,
             object: textView,
             queue: .main
         ) { [weak self] _ in
             (self?.textView as? EditorTextView)?.updateBracketHighlight()
-        }
+        })
 
         scrollView.documentView = textView
 
@@ -17885,17 +17943,15 @@ class EditorView: NSView {
         addSubview(lineGutter)
 
         // Redraw gutter on text change
-        NotificationCenter.default.addObserver(forName: NSText.didChangeNotification,
-                                               object: textView,
-                                               queue: .main) { [weak self] _ in
+        notificationTokens.append(NotificationCenter.default.addObserver(
+            forName: NSText.didChangeNotification, object: textView, queue: .main) { [weak self] _ in
             self?.lineGutter?.needsDisplay = true
-        }
+        })
         // Redraw gutter on scroll
-        NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification,
-                                               object: scrollView.contentView,
-                                               queue: .main) { [weak self] _ in
+        notificationTokens.append(NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification, object: scrollView.contentView, queue: .main) { [weak self] _ in
             self?.lineGutter?.needsDisplay = true
-        }
+        })
 
         // Use same semi-transparent bg as terminal (kTermBgCGColor) — overridden by applyTheme later
         let initialBG = NSColor(cgColor: kTermBgCGColor) ?? NSColor(calibratedRed: 0.05, green: 0.05, blue: 0.08, alpha: 0.28)
@@ -21243,6 +21299,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             PaletteCommand(title: "Cursor Beam", shortcut: "") { [weak self] in self?.setCursorStyle(1) },
             PaletteCommand(title: "Cursor Underline", shortcut: "") { [weak self] in self?.setCursorStyle(0) },
             PaletteCommand(title: "Cursor Blink (\(onOff("cursorBlink")))", shortcut: "") { [weak self] in self?.promptToggle("Cursor Blink", key: "cursorBlink") },
+            PaletteCommand(title: "Kill Process", shortcut: "") { [weak self] in
+                guard let self = self, self.activeTab < self.termViews.count,
+                      let tv = self.termViews[self.activeTab] else { return }
+                tv.killForegroundProcess()
+            },
+            PaletteCommand(title: "Reset TTY", shortcut: "") { [weak self] in
+                guard let self = self, self.activeTab < self.termViews.count,
+                      let tv = self.termViews[self.activeTab] else { return }
+                tv.resetTermiosModes()
+            },
             PaletteCommand(title: "Resetsystem", shortcut: "") { [weak self] in self?.confirmResetSystem() },
             // Slider-Befehle
             PaletteCommand(title: "Opacity (\(opacityPct)%)", shortcut: "") { [weak self] in self?.promptSlider("Opacity", key: "windowOpacity", current: "\(opacityPct)%", min: 30, max: 100) },

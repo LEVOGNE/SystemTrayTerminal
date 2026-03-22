@@ -20,13 +20,13 @@
 
 ![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=for-the-badge&logo=apple&logoColor=white)
 ![Swift](https://img.shields.io/badge/Swift-5.9-F05138?style=for-the-badge&logo=swift&logoColor=white)
-![Lines](https://img.shields.io/badge/22700%2B_Lines-One_File-blue?style=for-the-badge)
+![Lines](https://img.shields.io/badge/22800%2B_Lines-One_File-blue?style=for-the-badge)
 ![App](https://img.shields.io/badge/App-3.1_MB-purple?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-Free_for_Personal_Use-green?style=for-the-badge)
 
 <br>
 
-[**Download SystemTrayTerminal.app (v1.5.10)**](https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest) · [**Website**](https://levogne.github.io/SystemTrayTerminal/)
+[**Download SystemTrayTerminal.app (v1.5.11)**](https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest) · [**Website**](https://levogne.github.io/SystemTrayTerminal/)
 
 ---
 
@@ -88,7 +88,7 @@
 ## Why SystemTrayTerminal?
 
 > [!IMPORTANT]
-> **21,700+ lines. One file. 4.8 MB app. Full terminal emulation + built-in text editor + WebPicker.**
+> **22,800+ lines. One file. 4.8 MB app. Full terminal emulation + built-in text editor + WebPicker.**
 >
 > No Electron. No WebView. No libvte. No SwiftTerm.
 > Written from scratch with a hand-rolled VT parser, direct PTY management,
@@ -780,7 +780,7 @@ SystemTrayTerminal is source-available with a dual license:
 
 See [LICENSE](./LICENSE) for details. Contact: **l.ersen@icloud.com**
 
-> **21,700+ lines of Swift. One file. Zero dependencies. 4.8 MB app. Full VT emulation + Text Editor + WebPicker + SSH Manager + SHA256-verified auto-updater.**
+> **22,800+ lines of Swift. One file. Zero dependencies. 4.8 MB app. Full VT emulation + Text Editor + WebPicker + SSH Manager + SHA256-verified auto-updater.**
 
 ### Contributing
 
@@ -815,7 +815,7 @@ This project follows [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
 ### SystemTrayTerminal v1.5.5
 
-*21,700+ lines. One file. Zero dependencies. Text Editor with Live Preview. SSH Manager. Git panel. WebPicker. Color Themes. SHA256-verified auto-updater.*
+*22,800+ lines. One file. Zero dependencies. Text Editor with Live Preview. SSH Manager. Git panel. WebPicker. Color Themes. SHA256-verified auto-updater.*
 
 *Built with obsessive attention to every escape sequence, every pixel, every frame.*
 

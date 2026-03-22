@@ -4,6 +4,29 @@ All notable changes to SystemTrayTerminal are documented here.
 
 ---
 
+## v1.5.11 — 2026-03-22
+
+### New Features
+
+- **Kill Process** — New Command Palette entry (Double-Ctrl → "Kill Process") instantly kills the foreground process with SIGKILL without closing the tab or the shell. Useful when a server or program is stuck and ignores Ctrl+C.
+- **Reset TTY** — New Command Palette entry (Double-Ctrl → "Reset TTY") kills any stuck foreground process and restores the terminal to a sane state. Fixes terminals left in raw mode after a server or TUI app crashes without cleanup.
+
+### Bug Fixes
+
+- **Ctrl+C / Ctrl+Z not working reliably** — `forkpty` was called with `nil` for the termios parameter. In a GUI app with no controlling terminal, this produced undefined PTY settings where `ISIG` could be unset, causing Ctrl+C to not send SIGINT. The PTY now starts with explicit sane termios (ISIG, ECHO, ICANON, all control characters correctly mapped).
+- **Terminal stuck after server exits** — After a server or TUI program left the PTY in raw mode, zsh could not restore a clean state because it had saved the already-broken initial termios. With the explicit termios fix, zsh now saves and restores a known-good baseline.
+- **Stale keypresses after process exit** — Keystrokes pressed during a hung process were buffered in the PTY and appeared as garbage in the next shell command. `tcflush(TCIFLUSH)` now drains the input buffer when the shell exits.
+- **Terminal modes leaked after crash** — If a process enabled mouse tracking (`\e[?1000h`) or bracketed paste mode (`\e[?2004h`) and then crashed without restoring them, those modes persisted in the terminal. They are now reset automatically on shell exit.
+- **Editor tab observer leak** — Each editor tab registered three `NotificationCenter` block observers that were never removed when the tab was closed. Opening and closing many editor tabs accumulated hundreds of dead observers, slowing text editing. Observers are now properly stored and removed on `deinit`.
+- **File descriptor leak in TerminalView** — If a `TerminalView` was deallocated before its `DispatchSource` was created (edge case during failed init), `masterFd` was never closed. `deinit` now closes the fd directly as fallback.
+
+### Improvements
+
+- **writePTY no longer blocks main thread** — The EAGAIN retry loop no longer sleeps on the main thread for regular keystrokes. `EINTR` retries immediately; `EAGAIN` (PTY buffer full, rare) retries with a short sleep only when needed for large paste operations.
+- **c_cc initialized to POSIX_VDISABLE** — All PTY control character slots are now initialized to `0xFF` (`_POSIX_VDISABLE`) before setting the ones we need. Previously zero-initialized slots could accidentally bind control actions to NUL bytes.
+
+---
+
 ## v1.5.10 — 2026-03-22
 
 ### Bug Fixes
